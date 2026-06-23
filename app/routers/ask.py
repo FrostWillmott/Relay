@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -59,55 +58,34 @@ async def ask(body: AskRequest, request: Request) -> AskResponse:
 async def ask_stream(body: AskRequest, request: Request) -> StreamingResponse:
     """Stream the LLM answer as Server-Sent Events.
 
-    The provider now yields decoded markdown chunks (not raw JSON tokens),
-    so each ``chunk`` event is clean text ready for incremental rendering.
-    When the stream ends, a ``done`` event carries the full answer and
-    language (detected heuristically from the assembled text).
+    Each ``chunk`` event carries clean decoded markdown (not raw JSON).
+    The final ``done`` event carries the assembled answer and language.
+    Business logic lives in :func:`llm_service.ask_stream_llm`.
     """
     provider = _get_provider(request)
 
     async def _sse_generator() -> AsyncGenerator[str, None]:
-        answer_chunks: list[str] = []
         try:
-            if not body.question.strip():
-                yield f"data: {json.dumps({'error': 'empty'})}\n\n"
-                return
-            sanitized = llm_service.sanitize(body.question)
-            user_message = llm_service.build_message(sanitized)
-            async for chunk in provider.stream_complete(user_message):
-                answer_chunks.append(chunk)
-                payload = json.dumps({"chunk": chunk}, ensure_ascii=False)
-                yield f"data: {payload}\n\n"
+            async for item in llm_service.ask_stream_llm(
+                body.question, provider
+            ):
+                if isinstance(item, AskResponse):
+                    done_payload = json.dumps(
+                        {
+                            "done": True,
+                            "answer": item.answer,
+                            "language": item.language,
+                        },
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {done_payload}\n\n"
+                else:
+                    payload = json.dumps({"chunk": item}, ensure_ascii=False)
+                    yield f"data: {payload}\n\n"
+        except EmptyInputError:
+            yield f"data: {json.dumps({'error': 'empty'})}\n\n"
         except LLMError as exc:
             yield f"data: {json.dumps({'error': exc.reason})}\n\n"
-            return
-
-        # The stream yields only the answer markdown; language comes from
-        # a lightweight parse of the full assembled text (no extra API call).
-        full_answer = "".join(answer_chunks)
-        if not full_answer:
-            yield f"data: {json.dumps({'error': 'invalid_output'})}\n\n"
-            return
-
-        # Detect language: Cyrillic characters present → ru, else en.
-        has_cyrillic = any("\u0400" <= c <= "\u04ff" for c in full_answer)
-        language: Literal["ru", "en"] = "ru" if has_cyrillic else "en"
-
-        item = HistoryItem(
-            question=body.question,
-            answer=full_answer,
-            language=language,
-        )
-        history_service.append(item)
-        done_payload = json.dumps(
-            {
-                "done": True,
-                "answer": full_answer,
-                "language": language,
-            },
-            ensure_ascii=False,
-        )
-        yield f"data: {done_payload}\n\n"
 
     return StreamingResponse(
         _sse_generator(),

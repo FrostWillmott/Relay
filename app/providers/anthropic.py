@@ -113,12 +113,6 @@ class AnthropicProvider:
         except anthropic.APIStatusError as exc:
             raise LLMError("provider_error") from exc
 
-    @retry(
-        retry=retry_if_exception(_is_retryable),
-        wait=wait_exponential(multiplier=1, min=1, max=8),
-        stop=stop_after_attempt(3),
-        reraise=True,
-    )
     def _sync_stream(self, user_message: str, q: queue.Queue[Any]) -> None:
         """Blocking stream loop — extract answer content, put chunks into *q*.
 
@@ -130,6 +124,11 @@ class AnthropicProvider:
           - ``waiting``: buffering raw tokens until ``"answer": "`` is found.
           - ``streaming``: emitting decoded content characters.
           - ``done``: closing quote of the answer field reached; stop early.
+
+        Exceptions are placed into *q* so the async consumer can re-raise
+        them; the ``@retry`` decorator cannot be applied here because the
+        ``except`` block swallows exceptions into the queue before they can
+        propagate to tenacity.  Retry logic lives in :meth:`stream_complete`.
         """
         assert self._client is not None
         try:
@@ -187,14 +186,36 @@ class AnthropicProvider:
     async def stream_complete(self, user_message: str) -> AsyncIterator[str]:
         """Yield decoded answer-markdown chunks from a streaming API call.
 
-        A per-chunk deadline of *self._timeout* seconds ensures the stream
-        never hangs indefinitely on a stalled connection.
+        Retry is applied at this level: on a transient failure (429 / 5xx)
+        the whole stream restarts from scratch, up to 3 attempts.  A per-chunk
+        deadline of *self._timeout* seconds prevents indefinite hangs.
         """
         if self._client is None:
             raise LLMError("no_key")
-        q: queue.Queue[Any] = queue.Queue()
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(None, self._sync_stream, user_message, q)
+
+        last_exc: LLMError | None = None
+        for attempt in range(3):
+            q: queue.Queue[Any] = queue.Queue()
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, self._sync_stream, user_message, q)
+            try:
+                async for chunk in self._drain_queue(loop, q):
+                    yield chunk
+                return  # success — stop retrying
+            except LLMError as exc:
+                if not _is_retryable(exc) or attempt == 2:
+                    raise
+                last_exc = exc
+                # Exponential back-off: 1 s, 2 s before the third attempt.
+                await asyncio.sleep(2**attempt)
+
+        if last_exc is not None:
+            raise last_exc  # pragma: no cover
+
+    async def _drain_queue(
+        self, loop: asyncio.AbstractEventLoop, q: queue.Queue[Any]
+    ) -> AsyncIterator[str]:
+        """Yield string chunks from *q* until sentinel; raise on errors."""
         while True:
             item = await self._get_next(loop, q)
             if item is _SENTINEL:
@@ -216,8 +237,8 @@ class AnthropicProvider:
             raise LLMError("no_key") from item
         if isinstance(item, anthropic.RateLimitError):
             raise LLMError("rate_limit") from item
-        if isinstance(item, (anthropic.APIStatusError, Exception)) and (
-            item is not _SENTINEL
-        ):
+        if isinstance(item, anthropic.APIStatusError):
+            raise LLMError("provider_error") from item
+        if isinstance(item, Exception):
             raise LLMError("provider_error") from item
         return item
