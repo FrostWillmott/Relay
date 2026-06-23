@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LLM provider key — optional so the app starts even without it;
+    # LLM provider key — optional, so the app starts even without it;
     # a missing key surfaces as a 503 on the first request.
     anthropic_api_key: str | None = None
     llm_model: str = "claude-haiku-4-5"

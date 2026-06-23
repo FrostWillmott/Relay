@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LLMOutput(BaseModel):
@@ -27,3 +28,4 @@ class HistoryItem(BaseModel):
     question: str
     answer: str
     language: Literal["ru", "en"]
+    timestamp: float = Field(default_factory=time.time)

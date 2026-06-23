@@ -79,7 +79,7 @@ Prompt strings are in Russian. The ruff per-file-ignore above handles the
 "ambiguous character" rules locally — don't disable RUF globally to work around
 it.
 
-## Current project state (updated 2026-06-23)
+## Current project state (updated 2026-06-24)
 
 ### What's done (fully verified)
 - **Backend Phase 1**: all 3 layers complete (`routers/`, `services/`, `providers/`)
@@ -95,7 +95,11 @@ it.
 - **Tests**: `tests/test_core.py` — 21 pytest tests: sanitize (5), parse_output (4), ask_llm (3), `_decode_json_char` (5), `ask_stream_llm` (4) — both `/ask` and `/ask/stream` paths covered
 - **mypy --strict**: 0 errors on 16 source files (mypy added as dev dep via uv)
 - **ruff**: 0 errors, all files formatted
-- **TECHNICAL_DECISIONS.md**: 14 architectural decisions at project root
+- **TECHNICAL_DECISIONS.md**: 18 architectural decisions at project root
+- **UX/UI Improvements**: SVG favicon added; icon 404s (favicon.ico, apple-touch-icons) handled with 204 No Content in `main.py`
+- **History persistence**: `HistoryItem` now includes `timestamp` (populated on backend), ensuring timestamps remain visible after page refresh
+- **CDN Fix**: Switched to explicit UMD/browser builds for all frontend CDNs and optimized Babel configuration (`data-type="module"`) to resolve `SyntaxError: import declarations may only appear at top level of a module`.
+- **Markdown renderer crash fix**: CDN serves `marked` 11.1.1 but the `code` renderer used the v12 object API (`code({text, lang})`), so `text` was `undefined` → `hljs.highlight(undefined,…)` threw `can't access property "replace"`, crashing React into a blank beige screen on any answer with a code block. Renderer now handles both v11 (positional) and v12 (token-object) signatures; `renderMd` wrapped in `try/catch` so a render error can never blank the SPA.
 
 ### Streaming architecture note
 `AnthropicProvider.stream_complete()` is an `async def` with `yield` (async generator) that uses a `queue.Queue` to bridge the sync `messages.stream()` thread with the async context. The Protocol stub also uses `async def` + `yield` to satisfy mypy's type checking without requiring `await` at the call site.

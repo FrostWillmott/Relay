@@ -263,6 +263,66 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ---
 
+## 15. History Persistence and UI Consistency: `timestamp` in `HistoryItem`
+
+**Decision:** Add a `timestamp` field (float) to the `HistoryItem` model, populated automatically on the backend using `time.time()`, and map it to a JS `time` (ms) on the frontend.
+
+**The problem:** While history storage is intentionally non-persistent across server restarts (§8), it was also "semi-persistent" in the UI. When a user asked a question, a timestamp was generated in JS. However, refreshing the page reloaded the history from the server, which lacked timestamps. This caused timestamps to "vanish" on refresh, creating a jarring UX regression.
+
+**Alternatives considered:**
+- **Frontend-only timestamps:** ignore the lack of timestamps from the server after refresh (Poor UX).
+- **Server-side only formatting:** return a pre-formatted string (Inflexible for different locales).
+- **Full persistence (SQLite):** solves both persistence and timestamps (Out of scope per §8).
+
+**Trade-offs:**
+- Adds a small amount of data to the JSON payload for `/history`.
+- Requires careful handling of unit differences (Python seconds vs. JS milliseconds).
+
+**Why we chose this:** This minor backend change fixes a major UI "polishing" issue. By providing the exact creation time from the server, the frontend can render consistent, localized timestamps regardless of whether the item was just created or reloaded from history. This aligns with the "Presentation" and "UI/UX" criteria of the contest.
+
+---
+
+## 16. Asset Cleanliness: 204 No Content for Browser Icons
+
+**Decision:** Explicitly handle `/favicon.ico` and `/apple-touch-icon*.png` routes with a `204 No Content` response instead of letting them hit the 404 handler or StaticFiles.
+
+**Trade-offs:**
+- Adds 5 lines of routing code to `main.py`.
+- Prevents annoying 404 errors in the terminal logs and browser console.
+- Combined with a data-URI SVG favicon in `index.html`, this provides a clean UI/UX without requiring binary asset management in the repository.
+
+---
+
+## 17. CDN Reliability, UMD Compatibility, and Babel Configuration
+
+**Decision:** Use explicit UMD/browser builds from `cdnjs` for all frontend dependencies (marked, dompurify, highlight.js) and configure Babel standalone with `data-presets="env,react"` and `data-type="module"`.
+
+**The problem:**
+- Some modern libraries (like `marked` 12.0.0) are published as pure ESM packages. Loading them via regular `<script>` tags causes `SyntaxError: import declarations may only appear at top level of a module`.
+- Babel standalone without explicit presets or type configuration may produce code that the browser fails to parse, especially when it attempts to handle ES modules or modern syntax in a non-module context.
+
+**Trade-offs:**
+- Moving scripts to the bottom of the `<body>` to ensure the DOM is ready and avoid blocking initial render.
+- Specifying versions and UMD-specific paths to ensure consistency.
+
+**Why we chose this:** This ensures maximum compatibility with the project's "no build step" architecture. By explicitly selecting UMD builds and configuring Babel to handle the transformed script as a module (`data-type="module"`), we avoid browser errors related to module/script mismatches and ensure the application initializes correctly on all supported browsers.
+
+---
+
+## 18. Markdown `code` Renderer: Version-Agnostic Signature + Crash Isolation
+
+**Decision:** Make the custom `marked` `code` renderer accept both the v11 positional signature (`code(codeString, infostring)`) and the v12 token-object signature (`code({ text, lang })`), and wrap `renderMd` in a `try/catch` that falls back to escaped `<pre>` text.
+
+**The problem:** The CDN actually serves `marked` 11.1.1, but the renderer was written against the v12 object API (`code({ text, lang })`). Under v11 the first argument is the code **string**, so destructuring `{ text, lang }` yielded `undefined`; `hljs.highlight(undefined, …)` then threw `can't access property "replace", e is undefined`. That exception propagated out of `AnswerCard` → `renderMd`, crashing the entire React tree and leaving only the beige background (blank screen) the moment an answer with a code block was rendered.
+
+**Trade-offs:**
+- The renderer carries a small branch to detect object-vs-string arguments — a few extra lines, but it survives a CDN version bump in either direction.
+- The `try/catch` in `renderMd` means a malformed Markdown/highlight edge case degrades to plain escaped text instead of taking down the whole UI.
+
+**Why we chose this:** A single rendering error must never blank the entire SPA. Decoupling the renderer from a specific `marked` major version and isolating render failures makes the answer view resilient regardless of which exact CDN build is delivered.
+
+---
+
 ## Reconsidered Decisions
 
 ### Model ID date suffix (`claude-haiku-4-5-20251001` → `claude-haiku-4-5`)

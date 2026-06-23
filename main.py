@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -24,6 +24,14 @@ def create_app() -> FastAPI:
     application.state.provider = provider
 
     application.include_router(ask.router)
+
+    @application.get("/favicon.ico", include_in_schema=False)
+    @application.get("/apple-touch-icon.png", include_in_schema=False)
+    @application.get(
+        "/apple-touch-icon-precomposed.png", include_in_schema=False
+    )
+    async def favicon() -> Response:
+        return Response(status_code=204)
 
     static_dir = Path(__file__).parent / "static"
     application.mount(
