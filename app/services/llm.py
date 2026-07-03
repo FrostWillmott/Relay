@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from typing import Literal
@@ -15,6 +16,8 @@ from app.models.response import AskResponse, HistoryItem, LLMOutput
 from app.prompts import build_user_message
 from app.providers.base import LLMProvider
 from app.services import history as history_service
+
+logger = logging.getLogger(__name__)
 
 # Public alias so routers don't need to import from prompts directly.
 build_message = build_user_message
@@ -65,6 +68,7 @@ async def _validate_output(raw: str, provider: LLMProvider) -> LLMOutput:
         try:
             return parse_output(raw2)
         except (json.JSONDecodeError, ValidationError) as exc:
+            logger.warning("LLM JSON repair failed: %s; raw=%.200r", exc, raw)
             raise LLMError("invalid_output") from exc
 
 

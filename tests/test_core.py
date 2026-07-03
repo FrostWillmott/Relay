@@ -142,30 +142,43 @@ async def test_ask_llm_raises_llm_error_on_bad_output() -> None:
 
 def test_decode_json_char_plain() -> None:
     """Regular chars pass through unchanged."""
-    ch, esc = _decode_json_char("a", False)
-    assert ch == "a" and esc is False
+    ch, esc, ubuf = _decode_json_char("a", False, None)
+    assert ch == "a" and esc is False and ubuf is None
 
 
 def test_decode_json_char_starts_escape() -> None:
     """Backslash sets escape_next=True and emits nothing."""
-    ch, esc = _decode_json_char("\\", False)
-    assert ch == "" and esc is True
+    ch, esc, ubuf = _decode_json_char("\\", False, None)
+    assert ch == "" and esc is True and ubuf is None
 
 
 def test_decode_json_char_newline_escape() -> None:
-    ch, esc = _decode_json_char("n", True)
-    assert ch == "\n" and esc is False
+    ch, esc, ubuf = _decode_json_char("n", True, None)
+    assert ch == "\n" and esc is False and ubuf is None
 
 
 def test_decode_json_char_quote_escape() -> None:
-    ch, esc = _decode_json_char('"', True)
-    assert ch == '"' and esc is False
+    ch, esc, ubuf = _decode_json_char('"', True, None)
+    assert ch == '"' and esc is False and ubuf is None
 
 
 def test_decode_json_char_unknown_escape() -> None:
     """Unknown escape sequences are passed through with the backslash."""
-    ch, esc = _decode_json_char("r", True)
-    assert ch == "\\r" and esc is False
+    ch, esc, ubuf = _decode_json_char("x", True, None)
+    assert ch == "\\x" and esc is False and ubuf is None
+
+
+def test_decode_json_char_unicode_escape() -> None:
+    r"""``\uXXXX`` sequences are decoded to the corresponding character."""
+    _, _, ubuf = _decode_json_char(
+        "u", True, None
+    )  # saw \u → start collecting
+    assert ubuf == ""
+    _, _, ubuf = _decode_json_char("0", False, ubuf)
+    _, _, ubuf = _decode_json_char("0", False, ubuf)
+    _, _, ubuf = _decode_json_char("4", False, ubuf)
+    ch, esc, ubuf = _decode_json_char("1", False, ubuf)  # A == "A"
+    assert ch == "A" and esc is False and ubuf is None
 
 
 # ---------------------------------------------------------------------------

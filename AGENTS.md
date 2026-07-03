@@ -79,7 +79,7 @@ Prompt strings are in Russian. The ruff per-file-ignore above handles the
 "ambiguous character" rules locally — don't disable RUF globally to work around
 it.
 
-## Current project state (updated 2026-06-24)
+## Current project state (updated 2026-06-23)
 
 ### What's done (fully verified)
 - **Backend Phase 1**: all 3 layers complete (`routers/`, `services/`, `providers/`)
