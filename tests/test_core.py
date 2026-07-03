@@ -105,11 +105,18 @@ def test_parse_output_raises_on_invalid_json() -> None:
         parse_output("not json at all")
 
 
-def test_parse_output_raises_on_missing_field() -> None:
+def test_parse_output_raises_on_missing_answer() -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        parse_output('{"answer": "ok"}')  # missing language field
+        parse_output('{"language": "en"}')  # missing required answer field
+
+
+def test_parse_output_language_defaults_to_en() -> None:
+    """language is optional — defaults to 'en' when omitted."""
+    out = parse_output('{"answer": "ok"}')
+    assert out.answer == "ok"
+    assert out.language == "en"
 
 
 # ---------------------------------------------------------------------------

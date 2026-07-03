@@ -62,7 +62,7 @@ async def _validate_output(raw: str, provider: LLMProvider) -> LLMOutput:
             "Твой предыдущий ответ не является валидным JSON.\n"
             f"Исходный ответ: {raw!r}\n\n"
             "Верни только JSON-объект без markdown-обёртки:\n"
-            '{"answer": "...", "language": "ru" | "en"}'
+            '{"answer": "..."}'
         )
         raw2 = await provider.complete(repair_msg)
         try:
@@ -72,14 +72,33 @@ async def _validate_output(raw: str, provider: LLMProvider) -> LLMOutput:
             raise LLMError("invalid_output") from exc
 
 
+def _detect_language(text: str) -> Literal["ru", "en"]:
+    """Detect language heuristically: Cyrillic characters → ``"ru"``."""
+    return "ru" if any("Ѐ" <= c <= "ӿ" for c in text) else "en"
+
+
 async def ask_llm(question: str, provider: LLMProvider) -> LLMOutput:
-    """End-to-end: sanitize question, call LLM, return validated output."""
+    """End-to-end: sanitize question, call LLM, return validated output.
+
+    Language is detected heuristically from the answer text (not parsed
+    from the JSON envelope), so both ``/ask`` and ``/ask/stream`` use
+    the same detection logic.
+    """
     if not question.strip():
         raise EmptyInputError("Question must not be empty")
     sanitized = sanitize(question)
     user_msg = build_user_message(sanitized)
     raw = await provider.complete(user_msg)
-    return await _validate_output(raw, provider)
+    output = await _validate_output(raw, provider)
+    output.language = _detect_language(output.answer)
+
+    history_service.append(
+        HistoryItem(
+            question=question, answer=output.answer, language=output.language
+        )
+    )
+
+    return output
 
 
 # ---------------------------------------------------------------------------
@@ -197,12 +216,10 @@ async def ask_stream_llm(
     if not full_answer:
         raise LLMError("invalid_output")
 
-    has_cyrillic = any("Ѐ" <= c <= "ӿ" for c in full_answer)
-    language: Literal["ru", "en"] = "ru" if has_cyrillic else "en"
+    language = _detect_language(full_answer)
 
-    item = HistoryItem(
-        question=question, answer=full_answer, language=language
+    history_service.append(
+        HistoryItem(question=question, answer=full_answer, language=language)
     )
-    history_service.append(item)
 
     yield AskResponse(answer=full_answer, language=language)

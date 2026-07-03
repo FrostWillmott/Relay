@@ -55,12 +55,6 @@ async def ask(body: AskRequest, request: Request) -> AskResponse:
             time.monotonic() - started,
         )
         raise _llm_exc_to_http(exc) from exc
-    item = HistoryItem(
-        question=body.question,
-        answer=output.answer,
-        language=output.language,
-    )
-    history_service.append(item)
     logger.info(
         "POST /ask OK: len(answer)=%d language=%s elapsed=%.3fs",
         len(output.answer),

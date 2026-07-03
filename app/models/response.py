@@ -9,10 +9,15 @@ from pydantic import BaseModel, Field
 
 
 class LLMOutput(BaseModel):
-    """Internal: parsed JSON envelope returned by the LLM."""
+    """Internal: parsed JSON envelope returned by the LLM.
+
+    ``language`` is detected heuristically from the answer text,
+    not parsed from the JSON — the model is no longer required
+    to include it.
+    """
 
     answer: str
-    language: Literal["ru", "en"]
+    language: Literal["ru", "en"] = "en"
 
 
 class AskResponse(BaseModel):
