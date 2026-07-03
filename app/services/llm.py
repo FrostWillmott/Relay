@@ -19,9 +19,6 @@ from app.services import history as history_service
 
 logger = logging.getLogger(__name__)
 
-# Public alias so routers don't need to import from prompts directly.
-build_message = build_user_message
-
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(
         r"ignore\s+(?:previous|above|all)\s+(?:instructions?|prompts?)",
@@ -31,6 +28,9 @@ _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"</?(?:SYSTEM|INST|SYS)>", re.IGNORECASE),
     re.compile(r"```\s*(?:system|instructions?)\b", re.IGNORECASE),
 ]
+
+# Matches the opening of the JSON "answer" field in a model output stream.
+_ANSWER_START_RE = re.compile(r'"answer"\s*:\s*"')
 
 
 def sanitize(text: str) -> str:
@@ -82,12 +82,99 @@ async def ask_llm(question: str, provider: LLMProvider) -> LLMOutput:
     return await _validate_output(raw, provider)
 
 
+# ---------------------------------------------------------------------------
+# Streaming answer extraction
+# ---------------------------------------------------------------------------
+
+
+def _decode_json_char(
+    ch: str, escape_next: bool, unicode_buf: str | None = None
+) -> tuple[str, bool, str | None]:
+    r"""Decode one JSON string character, including ``\uXXXX`` escapes.
+
+    Returns ``(emitted, new_escape_next, new_unicode_buf)``.
+    *unicode_buf* is ``None`` when not inside a ``\uXXXX`` sequence, or a
+    0-3 character hex string while accumulating digits.
+    """
+    if unicode_buf is not None:
+        new_buf = unicode_buf + ch
+        if len(new_buf) == 4:
+            try:
+                return chr(int(new_buf, 16)), False, None
+            except ValueError:
+                return "\\u" + new_buf, False, None
+        return "", False, new_buf
+    if escape_next:
+        if ch == "u":
+            return "", False, ""  # begin collecting 4 hex digits
+        mapping = {
+            "n": "\n",
+            "t": "\t",
+            "r": "\r",
+            "b": "\b",
+            "f": "\f",
+            "\\": "\\",
+            '"': '"',
+            "/": "/",
+        }
+        return mapping.get(ch, "\\" + ch), False, None
+    if ch == "\\":
+        return "", True, None
+    return ch, False, None
+
+
+async def _extract_answer_from_stream(
+    raw_chunks: AsyncIterator[str],
+) -> AsyncIterator[str]:
+    """Extract the ``answer`` field content from a raw JSON stream.
+
+    The model is instructed to return ``{"answer": "<markdown>"}``.
+    This transformer skips the JSON wrapper and emits only the decoded
+    markdown content, handling escape sequences and chunk boundaries.
+    """
+    buf = ""  # accumulation buffer before "answer": "
+    in_answer = False
+    escape_next = False
+    unicode_buf: str | None = None
+
+    async for text in raw_chunks:
+        if not in_answer:
+            buf += text
+            m = _ANSWER_START_RE.search(buf)
+            if not m:
+                # Keep only a suffix — the pattern can span chunk boundaries.
+                buf = buf[-30:]
+                continue
+            # Found the opening quote; pending content is after the match.
+            in_answer = True
+            pending = buf[m.end() :]
+        else:
+            pending = text
+
+        out = ""
+        for ch in pending:
+            if ch == '"' and not escape_next and unicode_buf is None:
+                # Closing quote of the answer field — done.
+                if out:
+                    yield out
+                return
+            decoded, escape_next, unicode_buf = _decode_json_char(
+                ch, escape_next, unicode_buf
+            )
+            out += decoded
+        if out:
+            yield out
+
+
 async def ask_stream_llm(
     question: str, provider: LLMProvider
 ) -> AsyncIterator[str | AskResponse]:
     """Stream LLM answer chunks, then yield a final AskResponse.
 
-    Yields decoded markdown string chunks as the model generates them.
+    Raw JSON chunks from the provider are filtered through
+    :func:`_extract_answer_from_stream` so the caller receives clean
+    markdown — no JSON wrapper is visible.
+
     The final item is an :class:`AskResponse` with the assembled answer
     and heuristically detected language (Cyrillic → ``"ru"``).
 
@@ -100,7 +187,9 @@ async def ask_stream_llm(
     user_msg = build_user_message(sanitized)
 
     answer_chunks: list[str] = []
-    async for chunk in provider.stream_complete(user_msg):
+    async for chunk in _extract_answer_from_stream(
+        provider.stream_complete(user_msg)
+    ):
         answer_chunks.append(chunk)
         yield chunk
 
@@ -108,7 +197,7 @@ async def ask_stream_llm(
     if not full_answer:
         raise LLMError("invalid_output")
 
-    has_cyrillic = any("\u0400" <= c <= "\u04ff" for c in full_answer)
+    has_cyrillic = any("Ѐ" <= c <= "ӿ" for c in full_answer)
     language: Literal["ru", "en"] = "ru" if has_cyrillic else "en"
 
     item = HistoryItem(

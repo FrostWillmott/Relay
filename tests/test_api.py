@@ -148,7 +148,9 @@ def _parse_sse(text: str) -> list[dict]:  # type: ignore[type-arg]
 
 
 def test_ask_stream_happy_path(client: TestClient) -> None:
-    app.state.provider = _MockProvider(chunks=["Hello ", "world"])
+    app.state.provider = _MockProvider(
+        chunks=['{"answer": "Hello ', 'world"}']
+    )
     resp = client.post("/ask/stream", json={"question": "hi"})
     assert resp.status_code == 200
     events = _parse_sse(resp.text)

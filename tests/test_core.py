@@ -9,9 +9,14 @@ import pytest
 
 from app.exceptions import EmptyInputError, LLMError
 from app.models.response import AskResponse, LLMOutput
-from app.providers.anthropic import _decode_json_char
 from app.providers.base import LLMProvider
-from app.services.llm import ask_llm, ask_stream_llm, parse_output, sanitize
+from app.services.llm import (
+    _decode_json_char,
+    ask_llm,
+    ask_stream_llm,
+    parse_output,
+    sanitize,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,16 +26,18 @@ from app.services.llm import ask_llm, ask_stream_llm, parse_output, sanitize
 class MockProvider:
     """Minimal LLMProvider that returns a pre-set response."""
 
-    def __init__(self, response: str, chunks: list[str] | None = None) -> None:
+    def __init__(
+        self, response: str = "", chunks: list[str] | None = None
+    ) -> None:
         self._response = response
-        self._chunks = chunks  # if set, stream_complete yields these
+        self._chunks = chunks
 
     async def complete(self, user_message: str) -> str:
         """Return pre-set response."""
         return self._response
 
     async def stream_complete(self, user_message: str) -> AsyncIterator[str]:
-        """Yield chunks or the full response as a single chunk."""
+        """Yield raw JSON chunks (simulates model output)."""
         items = self._chunks if self._chunks is not None else [self._response]
         for item in items:
             yield item
@@ -189,12 +196,18 @@ def test_decode_json_char_unicode_escape() -> None:
 @pytest.mark.asyncio
 async def test_ask_stream_llm_happy_path() -> None:
     """Chunks arrive, final AskResponse is the last yielded item."""
-    provider = MockProvider("", chunks=["Hello ", "world"])
+    raw_json = json.dumps({"answer": "Hello world"})
+    # Simulate raw model output split across chunks.
+    mid = len(raw_json) // 2
+    provider = MockProvider(
+        chunks=[raw_json[:mid], raw_json[mid:]],
+    )
     results: list[str | AskResponse] = []
     async for item in ask_stream_llm("ping", provider):  # type: ignore[arg-type]
         results.append(item)
-    assert results[0] == "Hello "
-    assert results[1] == "world"
+    # Only the answer content should appear in chunks.
+    text_chunks = [r for r in results if isinstance(r, str)]
+    assert "".join(text_chunks) == "Hello world"
     final = results[-1]
     assert isinstance(final, AskResponse)
     assert final.answer == "Hello world"
@@ -203,7 +216,8 @@ async def test_ask_stream_llm_happy_path() -> None:
 
 @pytest.mark.asyncio
 async def test_ask_stream_llm_cyrillic_detected_as_ru() -> None:
-    provider = MockProvider("", chunks=["Привет"])
+    raw_json = json.dumps({"answer": "Привет"}, ensure_ascii=False)
+    provider = MockProvider(chunks=[raw_json])
     results: list[str | AskResponse] = []
     async for item in ask_stream_llm("вопрос", provider):  # type: ignore[arg-type]
         results.append(item)
@@ -223,7 +237,7 @@ async def test_ask_stream_llm_rejects_empty_question() -> None:
 @pytest.mark.asyncio
 async def test_ask_stream_llm_raises_on_empty_stream() -> None:
     """Provider yields nothing → LLMError invalid_output."""
-    provider = MockProvider("", chunks=[])
+    provider = MockProvider(chunks=[])
     with pytest.raises(LLMError) as exc_info:
         async for _ in ask_stream_llm("hello", provider):  # type: ignore[arg-type]
             pass
