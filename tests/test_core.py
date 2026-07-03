@@ -12,6 +12,7 @@ from app.models.response import AskResponse, LLMOutput
 from app.providers.base import LLMProvider
 from app.services.llm import (
     _decode_json_char,
+    _extract_answer_from_stream,
     ask_llm,
     ask_stream_llm,
     parse_output,
@@ -249,3 +250,146 @@ async def test_ask_stream_llm_raises_on_empty_stream() -> None:
         async for _ in ask_stream_llm("hello", provider):  # type: ignore[arg-type]
             pass
     assert exc_info.value.reason == "invalid_output"
+
+
+# ---------------------------------------------------------------------------
+# _extract_answer_from_stream — chunk-boundary & edge-case tests
+# ---------------------------------------------------------------------------
+
+
+async def _to_async_iter(items: list[str]) -> AsyncIterator[str]:
+    """Convert a list of strings into an async iterator."""
+    for item in items:
+        yield item
+
+
+async def _collect(agen: AsyncIterator[str]) -> str:
+    """Drain an async generator into a single string."""
+    return "".join([chunk async for chunk in agen])
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_simple() -> None:
+    """Answer in a single chunk."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Hello world"}'])
+        )
+    )
+    assert result == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_start_split_across_chunks() -> None:
+    r""" "answ" in one chunk, 'er": "' in the next."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answ', 'er": "Hello world"}'])
+        )
+    )
+    assert result == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_content_across_chunks() -> None:
+    """Answer content split across multiple chunks."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Hello ', "brave ", 'world"}'])
+        )
+    )
+    assert result == "Hello brave world"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_escaped_newline() -> None:
+    r"""``\n`` inside the answer is decoded to an actual newline."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Line1\\nLine2"}'])
+        )
+    )
+    assert result == "Line1\nLine2"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_escape_at_chunk_boundary() -> None:
+    r"""Backslash at end of one chunk, 'n' at start of next → newline."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Line1\\', 'nLine2"}'])
+        )
+    )
+    assert result == "Line1\nLine2"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_unicode_escape_across_chunks() -> None:
+    r"""``\uXXXX`` split across chunk boundaries."""
+    # A = "A"
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "\\u00', '41"}'])
+        )
+    )
+    assert result == "A"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_escaped_quote() -> None:
+    r"""Escaped quote inside the answer is NOT treated as closing."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "He said: \\"Hi\\"."}'])
+        )
+    )
+    assert result == 'He said: "Hi".'
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_leading_garbage_before_json() -> None:
+    """Text before the JSON wrapper is ignored."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['Sure! Here is the answer:\n{"answer": "Hello"}'])
+        )
+    )
+    assert result == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_no_answer_field() -> None:
+    """Stream without an answer field yields nothing."""
+    result = await _collect(
+        _extract_answer_from_stream(_to_async_iter(['{"other": "data"}']))
+    )
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_empty_stream() -> None:
+    """Empty stream yields nothing."""
+    result = await _collect(_extract_answer_from_stream(_to_async_iter([])))
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_no_closing_quote() -> None:
+    """Stream ends before closing quote — partial content emitted."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Hello world'])
+        )
+    )
+    assert result == "Hello world"
+
+
+@pytest.mark.asyncio
+async def test_extract_answer_json_with_language_field() -> None:
+    """Extra fields after answer are ignored; closing quote still works."""
+    result = await _collect(
+        _extract_answer_from_stream(
+            _to_async_iter(['{"answer": "Hello", "language": "ru"}'])
+        )
+    )
+    assert result == "Hello"
