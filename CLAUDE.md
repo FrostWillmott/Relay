@@ -41,8 +41,8 @@ rules (no pipelines here), circuit breakers / Redis idempotency / eval sets
   path explicitly (retry/repair/fail loudly). Treat output as untrusted too.
 - **Secrets from env only.** `ANTHROPIC_API_KEY` read from env/settings, never
   hardcoded, never logged.
-- **Don't block the event loop.** The Anthropic SDK is sync — wrap calls in
-  `asyncio.to_thread`, don't fake-async it.
+- **Don't block the event loop.** Use the native `AsyncAnthropic` client —
+  no thread-pool bridging, no `queue.Queue`, no `run_in_executor`.
 - **Error handling, always.** No crash on: empty input, missing key, network
   failure, timeout, rate limit (429). Explicit loading / error / success states.
   Timeout on the call; retry transient errors once or twice with backoff; do NOT
@@ -85,11 +85,9 @@ The app exposes two endpoints:
 - `POST /ask/stream` — **SSE**, streams raw JSON chunks `{chunk: "..."}` then
   a final `{done: true, answer, language}`. Use this for the UI typewriter effect.
 
-`AnthropicProvider.stream_complete()` is an `async def` generator (uses `yield`
-internally) that bridges `client.messages.stream()` (sync, runs in a thread-pool
-via `run_in_executor`) and the async context via `queue.Queue`. The Protocol
-stub mirrors this with `async def` + `yield` so `mypy --strict` accepts it
-without `await` at call sites.
+`AnthropicProvider.stream_complete()` uses the native `AsyncAnthropic.messages.stream()` — no `queue.Queue`, no `run_in_executor`, no thread-pool bridging. It yields raw text chunks via `stream.text_stream` and retries on transient failures (429/5xx) before the first chunk.
+
+`_extract_answer_from_stream` — an async-generator transformer in the service layer — extracts only the `answer` field content via a state machine + JSON-escape decoder, so the typewriter effect never shows raw JSON.
 
 The frontend uses `fetch` + `ReadableStream` (no `EventSource`) — this lets us
 POST a JSON body and read SSE lines manually via `getReader()`.

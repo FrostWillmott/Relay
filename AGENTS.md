@@ -41,8 +41,8 @@ rules (no pipelines here), circuit breakers / Redis idempotency / eval sets
   path explicitly (retry/repair/fail loudly). Treat output as untrusted too.
 - **Secrets from env only.** `ANTHROPIC_API_KEY` read from env/settings, never
   hardcoded, never logged.
-- **Don't block the event loop.** The Anthropic SDK is sync — wrap calls in
-  `asyncio.to_thread`, don't fake-async it.
+- **Don't block the event loop.** Use the native `AsyncAnthropic` client —
+  no thread-pool bridging, no `queue.Queue`, no `run_in_executor`.
 - **Error handling, always.** No crash on: empty input, missing key, network
   failure, timeout, rate limit (429). Explicit loading / error / success states.
   Timeout on the call; retry transient errors once or twice with backoff; do NOT
@@ -88,12 +88,12 @@ it.
 - **max_tokens**: raised to 4096 (was 1024)
 - **Frontend SPA**: `static/index.html` — React 18 CDN + marked.js + highlight.js + DOMPurify, beige/black/green design
 - **SSE streaming**: `POST /ask/stream` endpoint, typewriter effect in UI with blinking cursor
-- **Streaming fix**: `_sync_stream` now extracts only the `answer` field content via a state machine + JSON-escape decoder — no raw JSON visible during typewriter effect
-- **Streaming reliability**: retry loop in `stream_complete` (3 attempts, `2^n` back-off) — `@retry` on `_sync_stream` was a no-op (exceptions go into the queue, not raised to tenacity); per-chunk `asyncio.wait_for` timeout still applies
+- **Streaming fix**: `_extract_answer_from_stream` — an async-generator transformer in the service layer that extracts only the `answer` field content via a state machine + JSON-escape decoder — no raw JSON visible during typewriter effect
+- **Streaming reliability**: retry loop in `stream_complete` (3 attempts, `2^n` back-off) on 429/5xx before the first chunk; once streaming has started, errors are mapped to `LLMError` rather than retried
 - **Layer fix**: `ask_stream_llm()` added to `llm_service` — sanitize, build_message, language detection, history.append moved out of router; `/ask/stream` now delegates to the service (mirrors `/ask` pattern)
 - **Config fix**: `sanitize()` now uses `settings.max_input_len` instead of hardcoded `_MAX_INPUT_LEN = 2000`; env override `MAX_INPUT_LEN` is now effective
-- **Tests**: `tests/test_core.py` — 21 pytest tests: sanitize (5), parse_output (4), ask_llm (3), `_decode_json_char` (5), `ask_stream_llm` (4) — both `/ask` and `/ask/stream` paths covered
-- **mypy --strict**: 0 errors on 16 source files (mypy added as dev dep via uv)
+- **Tests**: `tests/test_core.py` — 59 pytest tests covering sanitize, parse_output, ask_llm, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered
+- **mypy --strict**: 0 errors on 17 source files (mypy added as dev dep via uv)
 - **ruff**: 0 errors, all files formatted
 - **TECHNICAL_DECISIONS.md**: 18 architectural decisions at project root
 - **UX/UI Improvements**: SVG favicon added; icon 404s (favicon.ico, apple-touch-icons) handled with 204 No Content in `main.py`
@@ -102,9 +102,9 @@ it.
 - **Markdown renderer crash fix**: CDN serves `marked` 11.1.1 but the `code` renderer used the v12 object API (`code({text, lang})`), so `text` was `undefined` → `hljs.highlight(undefined,…)` threw `can't access property "replace"`, crashing React into a blank beige screen on any answer with a code block. Renderer now handles both v11 (positional) and v12 (token-object) signatures; `renderMd` wrapped in `try/catch` so a render error can never blank the SPA.
 
 ### Streaming architecture note
-`AnthropicProvider.stream_complete()` is an `async def` with `yield` (async generator) that uses a `queue.Queue` to bridge the sync `messages.stream()` thread with the async context. The Protocol stub also uses `async def` + `yield` to satisfy mypy's type checking without requiring `await` at the call site.
+`AnthropicProvider.stream_complete()` uses the native `AsyncAnthropic.messages.stream()` — no `queue.Queue`, no `run_in_executor`, no thread-pool bridging. It yields raw text chunks via `stream.text_stream` and retries on transient failures (429/5xx) before the first chunk.
 
-`_sync_stream` runs a two-state machine: (1) **waiting** — accumulate raw tokens until `"answer": "` regex match; (2) **streaming** — decode JSON escape sequences char by char, emit markdown to the queue, stop at the unescaped closing `"`. Language is detected heuristically in `ask_stream_llm` (Cyrillic presence → `"ru"`). The SSE router (`/ask/stream`) delegates entirely to `ask_stream_llm()` in the service layer — no business logic in the router.
+`_extract_answer_from_stream` — an async-generator transformer in the service layer — runs a two-state machine: (1) **waiting** — accumulate raw tokens until `"answer": "` regex match; (2) **streaming** — decode JSON escape sequences char by char, emit clean markdown, stop at the unescaped closing `"`. Language is detected heuristically in `ask_stream_llm` (Cyrillic presence → `"ru"`). The SSE router (`/ask/stream`) delegates entirely to `ask_stream_llm()` in the service layer — no business logic in the router.
 
 ### Key dev commands
 ```bash

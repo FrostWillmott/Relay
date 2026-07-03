@@ -39,38 +39,38 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ---
 
-## 3. Sync SDK + `asyncio.to_thread` vs. `AsyncAnthropic`
+## 3. Native `AsyncAnthropic` vs. Sync SDK + `asyncio.to_thread`
 
-**Decision:** Use the synchronous `anthropic.Anthropic` client wrapped in `asyncio.to_thread`.
+**Decision:** Use the native `AsyncAnthropic` client directly — no thread-pool bridging, no `queue.Queue`, no `run_in_executor`.
 
 **Alternatives considered:**
-- `anthropic.AsyncAnthropic` — the SDK's native async client
+- Sync `anthropic.Anthropic` client wrapped in `asyncio.to_thread`
 - Running the sync client directly in the event loop (blocking — wrong)
 
 **Trade-offs:**
-- `asyncio.to_thread` introduces thread overhead (~0.1 ms per call) — negligible for LLM calls that take seconds.
-- The async client is marginally cleaner code but requires `await` everywhere through the call stack.
-- At the time of writing, the Anthropic SDK docs noted that the sync client is more battle-tested for retry behaviour; `tenacity` integrates more naturally with sync code.
+- `asyncio.to_thread` introduces thread overhead (~0.1 ms per call) — negligible for LLM calls that take seconds, but adds complexity: a `queue.Queue` bridge for streaming, thread lifecycle management, and subtle retry interactions.
+- The async client requires `await` everywhere through the call stack, but FastAPI is already async — this is natural, not a cost.
+- The Anthropic SDK's async client is now mature and well-tested; the earlier concern about sync being "more battle-tested for retry behaviour" no longer applies.
 
-**Why we chose this:** The `asyncio.to_thread` pattern is the Anthropic SDK's own recommendation for FastAPI integration. It keeps the retry decorator (`tenacity`) entirely in synchronous context — `@retry` works by wrapping the function call, and doing this inside a thread avoids subtle event-loop interactions. The timeout (`asyncio.wait_for`) fires correctly from outside the thread. This is well-understood, safe, and widely used.
+**Why we chose this:** The native `AsyncAnthropic` eliminates ~40 lines of thread-bridging boilerplate (`queue.Queue`, `run_in_executor`, `_sync_stream`). Streaming becomes a simple `async for text in stream.text_stream` — no thread, no queue, no state-machine-in-a-thread. Retry is a manual loop in the async generator (see §14), which is transparent and testable. The code is simpler, faster to reason about, and has fewer moving parts.
 
 ---
 
-## 4. Retry Strategy: `tenacity` vs. Manual Loop
+## 4. Retry Strategy: Manual Loop vs. `tenacity`
 
-**Decision:** Use `tenacity` with `retry_if_exception`, `wait_exponential`, `stop_after_attempt`.
+**Decision:** Use explicit `for attempt in range(3)` loops with `asyncio.sleep(2**attempt)` back-off instead of the `tenacity` library.
 
 **Alternatives considered:**
-- Manual `for _ in range(3): try/except` loop
+- `tenacity` with `retry_if_exception`, `wait_exponential`, `stop_after_attempt`
 - `backoff` library (similar to tenacity)
 - No retry (fail fast and let the client retry)
 
 **Trade-offs:**
-- Manual loop is straightforward but easy to get wrong: missed reraise, wrong exception filtering, no jitter.
-- `backoff` library is functionally equivalent but has less adoption and fewer features.
-- No retry leaves transient 429s as user-visible errors on a first request.
+- Manual loop is slightly more verbose (~10 lines vs. a decorator) but fully transparent — the retry logic is visible at the call site, not hidden behind a decorator.
+- `tenacity` does not support async generators (`async def` + `yield`), which is the signature of `stream_complete`. A decorator-based approach would require a non-generator wrapper that collects all chunks before yielding — losing incremental streaming.
+- Removing `tenacity` eliminates a dependency and keeps the dependency tree minimal.
 
-**Why we chose this:** `tenacity` is declarative, well-tested, and makes the retry policy readable as a decorator. Critically, `retry_if_exception(_is_retryable)` lets us be surgical: retry on 429 and 5xx, but *never* on 4xx (auth error, invalid request) — retrying those would waste budget and hang the user. The `wait_exponential` gives safe backoff without thundering-herd issues.
+**Why we chose this:** The manual loop is the only approach that works for both `complete()` (async coroutine) and `stream_complete()` (async generator) with the same pattern. The `_map_exc` helper centralizes the retry-or-raise decision, keeping the loop body clean. The back-off is `2^attempt` seconds (1 s, 2 s) — simple, predictable, and sufficient for transient 429/5xx errors.
 
 ---
 
@@ -182,28 +182,27 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ---
 
-## 11. SSE Streaming: `queue.Queue` Bridge vs. `AsyncAnthropic` / Native Async
+## 11. SSE Streaming: Native `AsyncAnthropic` vs. `queue.Queue` Bridge
 
-**Decision:** Implement `stream_complete()` as an `async def` generator that uses `queue.Queue` to bridge the sync `messages.stream()` running in a thread-pool with the async event loop.
+**Decision:** Use the native `AsyncAnthropic.messages.stream()` — an async context manager that yields chunks via `stream.text_stream`. No `queue.Queue`, no `run_in_executor`, no thread-pool bridging.
 
 **Alternatives considered:**
-- `AsyncAnthropic` client with `async with client.messages.stream()`: native async streaming, no queue needed.
+- Sync `messages.stream()` running in a thread-pool, bridged to async via `queue.Queue`
 - Polling with `asyncio.sleep()` instead of `queue.Queue`: simpler but wastes CPU.
 - Long-polling (return full answer after generation): eliminates streaming complexity but loses the typewriter UX.
 
 **Trade-offs:**
-- The `queue.Queue` bridge adds ~5 lines of boilerplate per provider, but keeps the sync `tenacity` retry decorator working naturally in the thread.
-- `AsyncAnthropic` streaming is cleaner but requires migrating `complete()` to async as well and re-validating the retry behaviour with async tenacity — more risk for marginal gain.
-- The Protocol stub uses `async def` + `yield` (a no-op generator body) so that `mypy --strict` accepts `async for chunk in provider.stream_complete(...)` without an `await` — this is a deliberate pattern, not dead code.
-- The SSE router uses `fetch` + `ReadableStream` instead of `EventSource` API — `EventSource` only supports GET requests; `fetch` lets us POST a JSON body.
+- The `queue.Queue` bridge added ~40 lines of boilerplate (thread creation, queue.put/get, sentinel values) and made retry logic fragile — exceptions went into the queue instead of propagating, making `@retry` a silent no-op.
+- Native async streaming is a simple `async for text in stream.text_stream` — no threads, no queues, no sentinels.
+- The frontend uses `fetch` + `ReadableStream` instead of `EventSource` API — `EventSource` only supports GET requests; `fetch` lets us POST a JSON body.
 
-**Why we chose this:** The `queue.Queue` bridge is a well-known pattern for mixing sync and async I/O in Python. It keeps the existing sync `Anthropic` client (and all its retry logic) unchanged. The frontend typewriter effect delivers the "wow factor" the contest values for creativity, and the implementation is contained to ~50 lines split across two files.
+**Why we chose this:** The native `AsyncAnthropic` streaming eliminates the most complex and error-prone part of the codebase. The `queue.Queue` bridge was a workaround for the sync SDK; switching to the async SDK makes it unnecessary. The frontend typewriter effect delivers the "wow factor" the contest values for creativity, and the implementation is now contained to ~30 lines in the service layer.
 
 ---
 
-## 12. Streaming Answer Extraction: State Machine vs. Plain-Text Prompt
+## 12. Streaming Answer Extraction: `_extract_answer_from_stream` vs. Plain-Text Prompt
 
-**Decision:** Keep the JSON output schema (`{"answer": "…", "language": "…"}`) and extract only the `answer` field content during streaming via a two-state machine in `_sync_stream`.
+**Decision:** Keep the JSON output schema (`{"answer": "…", "language": "…"}`) and extract only the `answer` field content during streaming via an async-generator transformer (`_extract_answer_from_stream`) in the service layer.
 
 **The problem:** The system prompt instructs the model to return structured JSON. Streaming the raw model output (i.e., `stream.text_stream`) directly to the browser means the typewriter effect displays `{"answer": "## Postgres\n\nUse GIN…` — raw JSON syntax visible to the user. The wow-factor feature becomes a UX defect.
 
@@ -211,42 +210,39 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 1. **Switch to plain-text output for streaming, use a separate call for language**: removes the JSON wrapper entirely but requires two prompt variants (one for `/ask`, one for `/ask/stream`) and loses language information.
 2. **Disable streaming, keep full JSON**: eliminates the problem but removes the typewriter effect.
 3. **Incremental JSON parser on the frontend**: moves complexity to JS; harder to test and maintain across chunked boundaries.
-4. **State machine in `_sync_stream` (chosen)**: extracts only the `answer` field content server-side, decodes JSON escapes (`\n` → newline, `\"` → `"`, etc.), and emits clean markdown chunks. Language is detected heuristically in the router (Cyrillic presence → `"ru"`).
+4. **Async-generator transformer in the service layer (chosen)**: `_extract_answer_from_stream` is an `async def` generator that consumes raw chunks from the provider, runs a two-state machine (waiting → streaming), decodes JSON escapes (`\n` → newline, `\"` → `"`, `\uXXXX` → Unicode), and yields clean markdown. Language is detected heuristically in `ask_stream_llm` (Cyrillic presence → `"ru"`).
 
 **Trade-offs:**
-- The state machine adds ~30 lines of well-tested logic to `_sync_stream`. It is brittle only if the model deviates from the expected JSON structure — mitigated by the strict system prompt and existing `/ask` path as a validated fallback.
+- The state machine adds ~40 lines of well-tested logic. It is brittle only if the model deviates from the expected JSON structure — mitigated by the strict system prompt and existing `/ask` path as a validated fallback.
 - Language detection shifts from a model-provided field to a heuristic. For a Russian/English developer tool, Cyrillic-character detection is 100% reliable for Russian; for pure-English answers it defaults to `"en"`. Mixed-language answers (code with Russian comments) correctly detect as `"ru"`.
-- The `@retry` decorator on `_sync_stream` and per-chunk `asyncio.wait_for` in `stream_complete` now provide the same reliability guarantees as the `/ask` path.
+- The transformer is an async generator — it composes naturally with the provider's async generator, no threads or queues needed.
 
 **Why we chose this:** The user never needs to see the JSON wrapper — it is an internal serialisation detail between the model and the service layer. Extracting only the `answer` content server-side keeps the frontend simple (no JSON-aware parsing in the `ReadableStream` handler) and fixes the core UX defect without changing the prompt or splitting the API surface.
 
 ---
 
-## 14. Retry on the Streaming Path: `stream_complete` Loop vs. `@retry` on `_sync_stream`
+## 14. Retry on the Streaming Path: `stream_complete` Loop vs. `@retry` on `_extract_answer_from_stream`
 
-**Decision:** Implement retry at the `stream_complete` level (manual `for attempt in range(3)` with `asyncio.sleep` back-off) instead of decorating `_sync_stream` with `@retry`.
+**Decision:** Implement retry at the `stream_complete` level (manual `for attempt in range(3)` with `asyncio.sleep` back-off) — retry only before the first chunk is yielded.
 
-**The problem:** `_sync_stream` runs in a thread and communicates with the async caller via a `queue.Queue`. Exceptions are caught inside `_sync_stream` and placed into the queue (`q.put(exc)`) so they can be re-raised by the async consumer. This means `_sync_stream` itself never raises — it always returns normally. A tenacity `@retry` decorator wraps a *callable* and retries on exceptions raised *from that callable*; because the exceptions are swallowed into the queue before propagating, `@retry` on `_sync_stream` is a no-op.
-
-**Why `@retry` cannot be moved to `stream_complete`:** `stream_complete` is an async generator (`async def` + `yield`). Tenacity's `@retry` does not support async generators — it only supports coroutines (`async def` without `yield`) and regular functions.
+**The problem:** Once streaming has started and chunks have been yielded to the caller, re-yielding the JSON wrapper from a fresh attempt would corrupt the caller's extraction state (the `_extract_answer_from_stream` transformer would see a second `"answer": "` opening). Therefore, retry is only safe before any chunk reaches the caller.
 
 **Alternatives considered:**
-1. **Refactor `_sync_stream` to raise directly** (remove the `except` block): exceptions would propagate through `run_in_executor`, but the async consumer reads from the queue, not from the future, so it would hang waiting for a sentinel that never arrives.
-2. **Use `@retry` on a non-generator wrapper coroutine** that collects all chunks before yielding: correct, but loses incremental streaming — the user sees nothing until the full answer is ready.
-3. **Manual retry loop in `stream_complete` (chosen):** on `LLMError` with `_is_retryable`, restart the whole `_sync_stream` → queue → drain cycle. Back-off is `2^attempt` seconds (1 s, 2 s). Non-retryable errors propagate immediately.
+1. **`@retry` decorator on `_extract_answer_from_stream`**: tenacity does not support async generators — it only supports coroutines (`async def` without `yield`) and regular functions.
+2. **Refactor to a non-generator wrapper** that collects all chunks before yielding: correct, but loses incremental streaming — the user sees nothing until the full answer is ready.
+3. **Manual retry loop in `stream_complete` (chosen):** on transient failure before the first chunk, restart the whole `messages.stream()` → `text_stream` cycle. Back-off is `2^attempt` seconds (1 s, 2 s). Non-retryable errors propagate immediately. Once `yielded_any` is True, errors are mapped to `LLMError` rather than retried.
 
 **Trade-offs:**
-- Replaces one `@retry` decorator with ~10 lines of explicit loop — slightly more verbose but fully transparent.
 - Retry restarts the entire stream from scratch; partial chunks already yielded to the caller will be re-sent. In practice, transient 429/5xx errors occur before or at stream start, so the user rarely sees a mid-stream restart.
-- `_decode_json_char` and the state machine reset cleanly because they are local variables in `_sync_stream`.
+- The `_map_exc` helper is shared between `complete()` and `stream_complete()`, keeping the retry-or-raise decision in one place.
 
-**Why we chose this:** Correctness over brevity. The decorator *appeared* to add retry coverage, but it was a silent no-op. The explicit loop makes the retry logic visible, testable, and actually effective.
+**Why we chose this:** Correctness over brevity. The explicit loop makes the retry logic visible, testable, and actually effective. The `yielded_any` guard prevents the most dangerous failure mode — corrupting the caller's extraction state with a duplicate JSON wrapper.
 
 ---
 
 ## 13. Tests: `pytest` with `MockProvider` vs. No Tests
 
-**Decision:** `tests/test_core.py` with 21 unit tests covering `sanitize`, `parse_output`, `ask_llm`, `_decode_json_char`, and `ask_stream_llm` — the last three covering the actual `/ask/stream` code path used in production.
+**Decision:** `tests/test_core.py` with 59 unit tests covering `sanitize`, `parse_output`, `ask_llm`, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered.
 
 **The problem:** `TECHNICAL_DECISIONS.md` §1 and §2 justify the 3-layer split and Protocol abstraction partly on testability ("enough seams to test each layer in isolation", "swapping to a MockProvider requires no boilerplate"). The first revision had 12 tests but they only covered the `/ask` path, leaving the actually-executed `/ask/stream` path (state machine, JSON decoder, streaming service) untested — directly undermining the stated architectural rationale.
 
@@ -255,9 +251,9 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 - No tests: the project brief does not require them, but their absence contradicts the stated architectural rationale and is visible in the submission review.
 
 **Trade-offs:**
-- 21 unit tests add ~220 lines and two dev dependencies (`pytest`, `pytest-asyncio`). Zero maintenance burden — no mocks of external services, all pure function or Protocol-based.
+- 59 unit tests add ~400 lines and two dev dependencies (`pytest`, `pytest-asyncio`). Zero maintenance burden — no mocks of external services, all pure function or Protocol-based.
 - `MockProvider` uses `async def` + `yield` matching the Protocol stub, so it validates structural subtyping at import time.
-- Tests now cover both the `/ask` and `/ask/stream` execution paths: sanitize (5), parse_output (4), ask_llm (3), `_decode_json_char` (5), `ask_stream_llm` (4).
+- Tests cover both the `/ask` and `/ask/stream` execution paths, including the state machine, JSON decoder, language detection, and error handling.
 
 **Why we chose this:** A 2-hour contest should still show that the architecture is not just talk. The tests directly demonstrate the "testable seams" claim and cover the code that actually runs when the user clicks "Ask AI".
 
