@@ -54,15 +54,16 @@ uv run uvicorn main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 routers/      — HTTP только: парсинг, вызов сервиса, маппинг ошибок
 services/     — бизнес-логика: санитизация, оркестрация LLM, валидация вывода
-providers/    — Protocol-обёртка над Anthropic SDK (asyncio.to_thread + tenacity)
+providers/    — Protocol-обёртка над AsyncAnthropic (нативный async, без потоков)
 ```
 
 Потоковый путь `/ask/stream`:
-- `_sync_stream` — двухсостоянная state-машина, извлекает только поле `answer` из JSON-стрима
+- `AsyncAnthropic.messages.stream()` — нативный async-стриминг SDK, без `queue.Queue` и `run_in_executor`
+- `_extract_answer_from_stream` — async-генератор-трансформер в сервисном слое, извлекает поле `answer` из сырого JSON-стрима
 - `stream_complete` — async-генератор с retry-циклом (3 попытки, `2^n` back-off для 429/5xx)
-- `ask_stream_llm` — сервисный слой: sanitize → build_message → stream → history
+- `ask_stream_llm` — сервисный слой: sanitize → build_message → stream → extract → history
 
-Подробнее: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 14 архитектурных решений с trade-offs.
+Подробнее: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 18 архитектурных решений с trade-offs.
 
 ---
 
@@ -86,3 +87,11 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/
 - **Валидация вывода**: Pydantic `LLMOutput` + repair-loop на `/ask`; state-машина на `/ask/stream`
 - **Prompt injection mitigation**: нейтрализация (не удаление) маркеров инъекций + `<USER_INPUT>` делимитер
 - **Error states**: 429 → «Слишком много запросов», 503 → «AI не настроен», 504 → «Таймаут», network → «Нет сети»
+
+---
+
+## Известные ограничения
+
+- **Нет аутентификации и rate-limiting'а.** Любой, кто видит порт, может слать запросы и расходовать ваш API-бюджет. `/history` отдаёт вопросы и ответы без какой-либо авторизации. Это осознанное решение для демо на localhost — в продакшене потребуются API-ключи, OAuth или reverse-proxy с лимитами.
+- **История — per-process `deque`.** При 2+ воркерах uvicorn/gunicorn каждый воркер видит свою историю. Осознанный trade-off для контестного таймбокса (см. TD §8).
+- **БД не используется.** Проект заточен под демонстрацию FastAPI + LLM-интеграции. Если цель портфолио — показать async SQLAlchemy/Redis/Celery, Relay эту роль не закрывает.

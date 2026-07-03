@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 
 import anthropic
 
-from app.exceptions import LLMError
+from app.exceptions import LLMError, LLMErrorReason
 from app.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -52,14 +52,14 @@ class AnthropicProvider:
         """
         if isinstance(exc, TimeoutError):
             logger.warning("Call timed out after %.1fs", timeout)
-            raise LLMError("timeout") from exc
+            raise LLMError(LLMErrorReason.TIMEOUT) from exc
         if isinstance(exc, anthropic.AuthenticationError):
             logger.critical("Anthropic authentication failed (bad API key?)")
-            raise LLMError("no_key") from exc
+            raise LLMError(LLMErrorReason.NO_KEY) from exc
         if isinstance(exc, anthropic.RateLimitError):
             logger.warning("Rate limit (429) attempt %d/3", attempt + 1)
             if attempt >= 2:
-                raise LLMError("rate_limit") from exc
+                raise LLMError(LLMErrorReason.RATE_LIMIT) from exc
             return True
         if isinstance(exc, anthropic.APIStatusError):
             if exc.status_code < 500:
@@ -68,14 +68,14 @@ class AnthropicProvider:
                     exc.status_code,
                     exc.body,
                 )
-                raise LLMError("provider_error") from exc
+                raise LLMError(LLMErrorReason.PROVIDER_ERROR) from exc
             logger.warning(
                 "Server error: status=%d attempt %d/3",
                 exc.status_code,
                 attempt + 1,
             )
             if attempt >= 2:
-                raise LLMError("provider_error") from exc
+                raise LLMError(LLMErrorReason.PROVIDER_ERROR) from exc
             return True
         raise  # unexpected — let it propagate
 
@@ -87,7 +87,7 @@ class AnthropicProvider:
         raised immediately.
         """
         if self._client is None:
-            raise LLMError("no_key")
+            raise LLMError(LLMErrorReason.NO_KEY)
 
         for attempt in range(3):
             try:
@@ -113,10 +113,10 @@ class AnthropicProvider:
                 raise
 
             if not response.content:
-                raise LLMError("invalid_output")
+                raise LLMError(LLMErrorReason.INVALID_OUTPUT)
             block = response.content[0]
             if not isinstance(block, anthropic.types.TextBlock):
-                raise LLMError("invalid_output")
+                raise LLMError(LLMErrorReason.INVALID_OUTPUT)
             return block.text
 
         raise RuntimeError("unreachable")  # pragma: no cover
@@ -133,7 +133,7 @@ class AnthropicProvider:
         retry; the caller should handle this or accept the rare edge case.
         """
         if self._client is None:
-            raise LLMError("no_key")
+            raise LLMError(LLMErrorReason.NO_KEY)
 
         for attempt in range(3):
             try:

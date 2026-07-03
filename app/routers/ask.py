@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.exceptions import EmptyInputError, LLMError
+from app.exceptions import EmptyInputError, LLMError, LLMErrorReason
 from app.models.request import AskRequest
 from app.models.response import AskResponse, HistoryItem
 from app.providers.base import LLMProvider
@@ -27,11 +27,11 @@ def _get_provider(request: Request) -> LLMProvider:
 
 def _llm_exc_to_http(exc: LLMError) -> HTTPException:
     _status: dict[str, int] = {
-        "no_key": 503,
-        "timeout": 504,
-        "rate_limit": 429,
-        "invalid_output": 502,
-        "provider_error": 502,
+        LLMErrorReason.NO_KEY: 503,
+        LLMErrorReason.TIMEOUT: 504,
+        LLMErrorReason.RATE_LIMIT: 429,
+        LLMErrorReason.INVALID_OUTPUT: 502,
+        LLMErrorReason.PROVIDER_ERROR: 502,
     }
     return HTTPException(
         status_code=_status.get(exc.reason, 502), detail=exc.reason

@@ -9,7 +9,7 @@ from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.providers.anthropic import AnthropicProvider
+from app.providers.factory import create_provider
 from app.routers import ask
 
 logging.basicConfig(
@@ -31,12 +31,7 @@ def create_app() -> FastAPI:
         settings.llm_timeout_sec,
     )
 
-    provider = AnthropicProvider(
-        api_key=settings.anthropic_api_key,
-        model=settings.llm_model,
-        timeout=settings.llm_timeout_sec,
-    )
-    application.state.provider = provider
+    application.state.provider = create_provider(settings)
 
     application.include_router(ask.router)
 

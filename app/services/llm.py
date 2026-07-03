@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import ValidationError
 
 from app.config import settings
-from app.exceptions import EmptyInputError, LLMError
+from app.exceptions import EmptyInputError, LLMError, LLMErrorReason
 from app.models.response import AskResponse, HistoryItem, LLMOutput
 from app.prompts import build_user_message
 from app.providers.base import LLMProvider
@@ -69,7 +69,7 @@ async def _validate_output(raw: str, provider: LLMProvider) -> LLMOutput:
             return parse_output(raw2)
         except (json.JSONDecodeError, ValidationError) as exc:
             logger.warning("LLM JSON repair failed: %s; raw=%.200r", exc, raw)
-            raise LLMError("invalid_output") from exc
+            raise LLMError(LLMErrorReason.INVALID_OUTPUT) from exc
 
 
 def _detect_language(text: str) -> Literal["ru", "en"]:
@@ -214,7 +214,7 @@ async def ask_stream_llm(
 
     full_answer = "".join(answer_chunks)
     if not full_answer:
-        raise LLMError("invalid_output")
+        raise LLMError(LLMErrorReason.INVALID_OUTPUT)
 
     language = _detect_language(full_answer)
 
