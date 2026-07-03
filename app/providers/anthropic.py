@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncIterator
 
 import anthropic
+import httpx
 
 from app.exceptions import LLMError, LLMErrorReason
 from app.prompts import SYSTEM_PROMPT
@@ -15,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    """Return True only for transient failures (429, 5xx)."""
+    """Return True only for transient failures (429, 5xx, network)."""
     if isinstance(exc, anthropic.RateLimitError):
         return True
     if isinstance(exc, anthropic.APIStatusError) and exc.status_code >= 500:
+        return True
+    if isinstance(exc, anthropic.APIConnectionError):
         return True
     return False
 
@@ -37,7 +40,15 @@ class AnthropicProvider:
         self._model = model
         self._timeout = timeout
         self._client: anthropic.AsyncAnthropic | None = (
-            anthropic.AsyncAnthropic(api_key=api_key)
+            anthropic.AsyncAnthropic(
+                api_key=api_key,
+                timeout=httpx.Timeout(
+                    connect=10.0,
+                    read=timeout,
+                    write=10.0,
+                    pool=10.0,
+                ),
+            )
             if api_key is not None
             else None
         )
@@ -60,6 +71,11 @@ class AnthropicProvider:
             logger.warning("Rate limit (429) attempt %d/3", attempt + 1)
             if attempt >= 2:
                 raise LLMError(LLMErrorReason.RATE_LIMIT) from exc
+            return True
+        if isinstance(exc, anthropic.APIConnectionError):
+            logger.warning("Network error: %s attempt %d/3", exc, attempt + 1)
+            if attempt >= 2:
+                raise LLMError(LLMErrorReason.PROVIDER_ERROR) from exc
             return True
         if isinstance(exc, anthropic.APIStatusError):
             if exc.status_code < 500:
@@ -128,14 +144,16 @@ class AnthropicProvider:
         No JSON extraction is performed — the service layer is responsible
         for transforming the raw stream into answer-markdown chunks.
 
-        Retries on transient failures (429, 5xx) up to 3 attempts with
-        exponential back-off.  Already-yielded chunks may be duplicated on
-        retry; the caller should handle this or accept the rare edge case.
+        Retries on transient failures only before the first chunk is yielded.
+        Once streaming has started, errors are mapped to :exc:`LLMError` rather
+        than retried — re-yielding the JSON wrapper from a fresh attempt would
+        corrupt the caller's extraction state.
         """
         if self._client is None:
             raise LLMError(LLMErrorReason.NO_KEY)
 
         for attempt in range(3):
+            yielded_any = False
             try:
                 async with self._client.messages.stream(
                     model=self._model,
@@ -150,9 +168,21 @@ class AnthropicProvider:
                     messages=[{"role": "user", "content": user_message}],
                 ) as stream:
                     async for text in stream.text_stream:
+                        yielded_any = True
                         yield text
                 return  # success — stop retrying
             except BaseException as exc:
+                if yielded_any:
+                    logger.warning(
+                        "Stream interrupted after chunks were yielded;"
+                        " cannot retry"
+                    )
+                    # Map to the appropriate LLMError but never retry:
+                    # re-yielding the JSON wrapper from a fresh attempt
+                    # would corrupt the caller's extraction state.
+                    if isinstance(exc, TimeoutError):
+                        raise LLMError(LLMErrorReason.TIMEOUT) from exc
+                    raise LLMError(LLMErrorReason.PROVIDER_ERROR) from exc
                 if self._map_exc(exc, attempt, self._timeout):
                     await asyncio.sleep(2**attempt)
                     continue
