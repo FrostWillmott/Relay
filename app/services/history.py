@@ -17,3 +17,8 @@ def append(item: HistoryItem) -> None:
 def get_all() -> list[HistoryItem]:
     """Return history oldest-first."""
     return list(_store)
+
+
+def clear() -> None:
+    """Remove all entries (primarily for test teardown)."""
+    _store.clear()

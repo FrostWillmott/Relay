@@ -15,7 +15,7 @@ from app.prompts import SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 
-def _is_retryable(exc: BaseException) -> bool:
+def _is_retryable(exc: Exception) -> bool:
     """Return True only for transient failures (429, 5xx, network)."""
     if isinstance(exc, anthropic.RateLimitError):
         return True
@@ -54,7 +54,7 @@ class AnthropicProvider:
         )
 
     @staticmethod
-    def _map_exc(exc: BaseException, attempt: int, timeout: float) -> bool:
+    def _map_exc(exc: Exception, attempt: int, timeout: float) -> bool:
         """Map an API exception to an LLMError or signal retry.
 
         Returns ``True`` if the caller should sleep and retry.
@@ -93,7 +93,7 @@ class AnthropicProvider:
             if attempt >= 2:
                 raise LLMError(LLMErrorReason.PROVIDER_ERROR) from exc
             return True
-        raise  # unexpected — let it propagate
+        raise exc  # unexpected — let it propagate
 
     async def complete(self, user_message: str) -> str:
         """Send a user message asynchronously, with timeout and retry.
@@ -122,7 +122,7 @@ class AnthropicProvider:
                     ),
                     timeout=self._timeout,
                 )
-            except BaseException as exc:
+            except Exception as exc:
                 if self._map_exc(exc, attempt, self._timeout):
                     await asyncio.sleep(2**attempt)
                     continue
@@ -148,6 +148,15 @@ class AnthropicProvider:
         Once streaming has started, errors are mapped to :exc:`LLMError` rather
         than retried — re-yielding the JSON wrapper from a fresh attempt would
         corrupt the caller's extraction state.
+
+        .. note::
+
+            Unlike :meth:`complete`, this method does **not** wrap the call in
+            ``asyncio.wait_for`` — only the underlying httpx read-timeout
+            applies between chunks.  A slow-but-dripping stream may therefore
+            run longer than ``self._timeout``.  This asymmetry is intentional
+            for the contest scope; production use should add an overall timeout
+            on the caller side.
         """
         if self._client is None:
             raise LLMError(LLMErrorReason.NO_KEY)
@@ -171,7 +180,7 @@ class AnthropicProvider:
                         yielded_any = True
                         yield text
                 return  # success — stop retrying
-            except BaseException as exc:
+            except Exception as exc:
                 if yielded_any:
                     logger.warning(
                         "Stream interrupted after chunks were yielded;"

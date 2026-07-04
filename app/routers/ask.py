@@ -99,8 +99,6 @@ async def ask_stream(body: AskRequest, request: Request) -> StreamingResponse:
                 else:
                     payload = json.dumps({"chunk": item}, ensure_ascii=False)
                     yield f"data: {payload}\n\n"
-        except EmptyInputError:
-            yield f"data: {json.dumps({'error': 'empty'})}\n\n"
         except LLMError as exc:
             logger.warning(
                 "POST /ask/stream failed: %s q=%.80r %.3fs",

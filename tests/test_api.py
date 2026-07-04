@@ -46,9 +46,9 @@ _VALID_PAYLOAD = json.dumps({"answer": "## Result", "language": "en"})
 
 @pytest.fixture(autouse=True)
 def clear_history() -> Generator[None, None, None]:
-    history_service._store.clear()  # type: ignore[attr-defined]
+    history_service.clear()
     yield
-    history_service._store.clear()  # type: ignore[attr-defined]
+    history_service.clear()
 
 
 @pytest.fixture

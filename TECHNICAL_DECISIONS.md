@@ -242,7 +242,7 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ## 13. Tests: `pytest` with `MockProvider` vs. No Tests
 
-**Decision:** `tests/test_core.py` with 59 unit tests covering `sanitize`, `parse_output`, `ask_llm`, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered.
+**Decision:** `tests/test_core.py` with 68 unit tests covering `sanitize`, `parse_output`, `ask_llm`, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered.
 
 **The problem:** `TECHNICAL_DECISIONS.md` §1 and §2 justify the 3-layer split and Protocol abstraction partly on testability ("enough seams to test each layer in isolation", "swapping to a MockProvider requires no boilerplate"). The first revision had 12 tests but they only covered the `/ask` path, leaving the actually-executed `/ask/stream` path (state machine, JSON decoder, streaming service) untested — directly undermining the stated architectural rationale.
 
@@ -251,7 +251,7 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 - No tests: the project brief does not require them, but their absence contradicts the stated architectural rationale and is visible in the submission review.
 
 **Trade-offs:**
-- 59 unit tests add ~400 lines and two dev dependencies (`pytest`, `pytest-asyncio`). Zero maintenance burden — no mocks of external services, all pure function or Protocol-based.
+- 68 unit tests add ~400 lines and two dev dependencies (`pytest`, `pytest-asyncio`). Zero maintenance burden — no mocks of external services, all pure function or Protocol-based.
 - `MockProvider` uses `async def` + `yield` matching the Protocol stub, so it validates structural subtyping at import time.
 - Tests cover both the `/ask` and `/ask/stream` execution paths, including the state machine, JSON decoder, language detection, and error handling.
 

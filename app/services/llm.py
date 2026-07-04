@@ -166,10 +166,11 @@ async def _extract_answer_from_stream(
             buf += text
             m = _ANSWER_START_RE.search(buf)
             if not m:
-                # Keep only a suffix — the pattern can span chunk boundaries.
+                # The pattern `"answer"\s*:\s*"` is at most ~20 chars with
+                # reasonable whitespace.  Keep a 30-char suffix to safely
+                # cover the pattern spanning a chunk boundary.
                 buf = buf[-30:]
                 continue
-            # Found the opening quote; pending content is after the match.
             in_answer = True
             pending = buf[m.end() :]
         else:
@@ -178,7 +179,6 @@ async def _extract_answer_from_stream(
         out = ""
         for ch in pending:
             if ch == '"' and not escape_next and unicode_buf is None:
-                # Closing quote of the answer field — done.
                 if out:
                     yield out
                 return

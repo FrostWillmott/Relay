@@ -92,7 +92,7 @@ it.
 - **Streaming reliability**: retry loop in `stream_complete` (3 attempts, `2^n` back-off) on 429/5xx before the first chunk; once streaming has started, errors are mapped to `LLMError` rather than retried
 - **Layer fix**: `ask_stream_llm()` added to `llm_service` — sanitize, build_message, language detection, history.append moved out of router; `/ask/stream` now delegates to the service (mirrors `/ask` pattern)
 - **Config fix**: `sanitize()` now uses `settings.max_input_len` instead of hardcoded `_MAX_INPUT_LEN = 2000`; env override `MAX_INPUT_LEN` is now effective
-- **Tests**: `tests/test_core.py` — 59 pytest tests covering sanitize, parse_output, ask_llm, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered
+- **Tests**: `tests/test_core.py` + `tests/test_providers.py` — 68 pytest tests covering sanitize, parse_output, ask_llm, `_decode_json_char`, `ask_stream_llm`, `_map_exc` (retry + error mapping), and more — both `/ask` and `/ask/stream` paths covered
 - **mypy --strict**: 0 errors on 17 source files (mypy added as dev dep via uv)
 - **ruff**: 0 errors, all files formatted
 - **TECHNICAL_DECISIONS.md**: 18 architectural decisions at project root

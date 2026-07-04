@@ -18,7 +18,7 @@ The streamed answer is rendered incrementally — raw JSON is never shown to the
 | Backend | FastAPI (async) + Pydantic v2 + pydantic-settings |
 | LLM | Anthropic SDK (Claude `claude-haiku-4-5`), prompt caching, SSE streaming |
 | Frontend | React 18 CDN + marked.js + highlight.js + DOMPurify — **a single** `static/index.html`, no bundler |
-| Dev | uv, ruff, mypy --strict, pytest (59 tests) |
+| Dev | uv, ruff, mypy --strict, pytest (68 tests) |
 
 ---
 
@@ -74,7 +74,7 @@ More details: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 18 architec
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py && uv run pytest tests/ -v
 ```
 
-Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 59/59 tests passing.
+Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 68/68 tests passing.
 
 ---
 

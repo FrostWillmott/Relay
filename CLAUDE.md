@@ -95,7 +95,7 @@ POST a JSON body and read SSE lines manually via `getReader()`.
 ## Key dev commands (for AI assistants)
 ```bash
 # Full check — run after every change, fix until green
-uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py
+uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py && uv run pytest tests/ -v
 
 # Auto-fix formatting
 uv run ruff format .

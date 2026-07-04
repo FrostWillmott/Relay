@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import anthropic
 import pytest
 
-from app.exceptions import LLMError
+from app.exceptions import LLMError, LLMErrorReason
 from app.providers.anthropic import AnthropicProvider, _is_retryable
 
 # ---------------------------------------------------------------------------
@@ -34,6 +34,86 @@ def test_is_retryable_client_error() -> None:
 
 def test_is_retryable_other_exception() -> None:
     assert _is_retryable(ValueError("foo")) is False
+
+
+# ---------------------------------------------------------------------------
+# _map_exc
+# ---------------------------------------------------------------------------
+
+
+def _make_exc(base_cls: type[BaseException], **attrs: object) -> BaseException:
+    """Create a minimal real Exception subclass instance.
+
+    Uses ``__new__`` + ``Exception.__init__`` to skip the anthropic
+    constructor (which requires a live response object), while still
+    passing both ``isinstance(exc, base_cls)`` and the ``raise ... from
+    exc`` chain check.
+    """
+    cls = type(f"_Mock{base_cls.__name__}", (base_cls,), {})
+    exc = cls.__new__(cls)
+    Exception.__init__(exc, base_cls.__name__)
+    for k, v in attrs.items():
+        object.__setattr__(exc, k, v)
+    return exc
+
+
+def test_map_exc_timeout_error() -> None:
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(TimeoutError("timed out"), 0, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.TIMEOUT
+
+
+def test_map_exc_authentication_error() -> None:
+    exc = _make_exc(anthropic.AuthenticationError)
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(exc, 0, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.NO_KEY
+
+
+def test_map_exc_rate_limit_retry() -> None:
+    exc = _make_exc(anthropic.RateLimitError)
+    assert AnthropicProvider._map_exc(exc, 0, 5.0) is True
+
+
+def test_map_exc_rate_limit_final() -> None:
+    exc = _make_exc(anthropic.RateLimitError)
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(exc, 2, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.RATE_LIMIT
+
+
+def test_map_exc_connection_error_retry() -> None:
+    exc = _make_exc(anthropic.APIConnectionError)
+    assert AnthropicProvider._map_exc(exc, 0, 5.0) is True
+
+
+def test_map_exc_connection_error_final() -> None:
+    exc = _make_exc(anthropic.APIConnectionError)
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(exc, 2, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.PROVIDER_ERROR
+
+
+def test_map_exc_client_error_4xx() -> None:
+    """4xx errors should NOT be retried — they're client mistakes."""
+    exc = _make_exc(
+        anthropic.APIStatusError, status_code=400, body="Bad request"
+    )
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(exc, 0, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.PROVIDER_ERROR
+
+
+def test_map_exc_server_error_5xx_retry() -> None:
+    exc = _make_exc(anthropic.APIStatusError, status_code=500)
+    assert AnthropicProvider._map_exc(exc, 0, 5.0) is True
+
+
+def test_map_exc_server_error_5xx_final() -> None:
+    exc = _make_exc(anthropic.APIStatusError, status_code=503)
+    with pytest.raises(LLMError) as exc_info:
+        AnthropicProvider._map_exc(exc, 2, 5.0)
+    assert exc_info.value.reason == LLMErrorReason.PROVIDER_ERROR
 
 
 # ---------------------------------------------------------------------------
