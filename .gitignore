@@ -15,8 +15,9 @@ build/
 .venv/
 venv/
 
-# JetBrains IDEs
+# IDEs
 .idea/
+.vscode/
 
 # Coverage
 .coverage
