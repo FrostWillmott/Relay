@@ -1,6 +1,6 @@
 # Relay — AI Team Assistant
 
-> A mini-dashboard for dev teams: ask a question — get a structured answer from Claude with a typewriter effect, a history of the last 5 queries, and a "Copy" button.
+> A dev-team mini-dashboard: ask a question — get a structured, streamed answer from Claude with a typewriter effect, history of the last 5 queries, and a "Copy" button.
 
 ---
 
@@ -18,7 +18,7 @@ The streamed answer is rendered incrementally — raw JSON is never shown to the
 | Backend | FastAPI (async) + Pydantic v2 + pydantic-settings |
 | LLM | Anthropic SDK (Claude `claude-haiku-4-5`), prompt caching, SSE streaming |
 | Frontend | React 18 CDN + marked.js + highlight.js + DOMPurify — **a single** `static/index.html`, no bundler |
-| Dev | uv, ruff, mypy --strict, pytest (68 tests) |
+| Dev | uv, ruff, mypy --strict, pytest (68 tests), pre-commit |
 
 ---
 
@@ -46,6 +46,13 @@ uv run uvicorn main:app --host 127.0.0.1 --port 8000 --env-file .env
 ```
 
 Open [http://localhost:8000](http://localhost:8000) in your browser.
+
+### Docker
+
+```bash
+docker build -t relay .
+docker run --env ANTHROPIC_API_KEY=your_key -p 8000:8000 relay
+```
 
 ---
 
@@ -86,12 +93,15 @@ Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pyte
 - **Retry**: 3 attempts with exponential back-off on 429/5xx; no retry on 4xx
 - **Output validation**: Pydantic `LLMOutput` + a repair loop on `/ask`; a state machine on `/ask/stream`
 - **Prompt injection mitigation**: neutralization (not removal) of injection markers + `<USER_INPUT>` delimiter
-- **Error states**: 429 → "Too many requests", 503 → "AI not configured", 504 → "Timeout", network → "No network"
 
 ---
 
-## Known limitations
+## Limitations
 
-- **No authentication or rate-limiting.** Anyone who can see the port can send requests and burn through your API budget. `/history` returns questions and answers without any authorization. This is a deliberate decision for a localhost demo — production would need API keys, OAuth, or a reverse proxy with limits.
-- **History is a per-process `deque`.** With 2+ uvicorn/gunicorn workers, each worker sees its own history. A deliberate trade-off for the contest timebox (see TD §8).
-- **No database.** The project is built to demonstrate FastAPI + LLM integration. If the goal is a portfolio piece showcasing async SQLAlchemy/Redis/Celery, Relay doesn't fill that role.
+No authentication, rate-limiting, or persistent storage — built as a focused demo of LLM integration and streaming. History is a per-process `deque` (not shared across uvicorn workers). See [TECHNICAL_DECISIONS.md §8](TECHNICAL_DECISIONS.md) for rationale.
+
+---
+
+## Background
+
+Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 68 tests, streaming fixes, and 18 documented architectural decisions as an experiment in AI-agent-assisted development.

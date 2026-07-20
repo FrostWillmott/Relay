@@ -11,11 +11,15 @@ deliberately minimal frontend** (single static page, vanilla JS or React via
 CDN). The Python side is where code quality is judged — keep it clean. The
 frontend just needs to look good on screen, not in source.
 
-## Lightweight mode (deliberate, not an oversight)
+## Rule modules
+General Python, LLM, testing, and architecture conventions live in
+`.claude/*.md` modules — this file only states project-specific choices and
+overrides. When this file conflicts with a module's [PREFER] rule, this file
+wins; [MUST] conflicts are surfaced rather than silently resolved.
+
+## Lightweight mode (overrides `clean-architecture.md`)
 This project intentionally uses the lighter 3-layer split, NOT full Clean
-Architecture. Per the rule levels, this project's CLAUDE.md takes precedence
-over [PREFER] rules — don't impose the full domain/use-case/adapter split here.
-Skipped on purpose for the timebox: full Clean Architecture, data-engineering
+Architecture. Skipped on purpose for the timebox: full CA, data-engineering
 rules (no pipelines here), circuit breakers / Redis idempotency / eval sets
 (there's no external-API loop — it's one call per button press).
 
@@ -24,75 +28,43 @@ rules (no pipelines here), circuit breakers / Redis idempotency / eval sets
   No business logic.
 - `services/` — business logic, LLM orchestration, prompt building, validation.
   No knowledge of HTTP. Raises domain exceptions; routers map them to HTTP.
-- Config + provider client live behind an interface.
+- `providers/` — Protocol wrapper over AsyncAnthropic, selected by a factory.
 - Separate Pydantic models for request / response — don't reuse one model.
 
-## LLM rules (these earn the +10 and avoid the penalties) [MUST]
-- **Specialized prompt, not a bare passthrough.** A system prompt scopes the
-  assistant as a concise team helper (short, structured, on-point answers).
-  This is the explicit difference between "real LLM" and "ChatGPT clone" the
-  brief penalizes.
-- **User input is untrusted.** Sanitize before it enters the prompt: neutralize
-  (don't delete) injection markers ("ignore previous", "SYSTEM:", fenced
-  markers). Isolate user text in explicit delimiters, tell the model to treat
-  everything inside as data, and put the real instructions after it with stated
-  precedence. Truncate to a sane max length.
-- **Validate model output** against a schema before use; handle the parse-fail
-  path explicitly (retry/repair/fail loudly). Treat output as untrusted too.
-- **Secrets from env only.** `ANTHROPIC_API_KEY` read from env/settings, never
-  hardcoded, never logged.
-- **Don't block the event loop.** Use the native `AsyncAnthropic` client —
-  no thread-pool bridging, no `queue.Queue`, no `run_in_executor`.
-- **Error handling, always.** No crash on: empty input, missing key, network
-  failure, timeout, rate limit (429). Explicit loading / error / success states.
-  Timeout on the call; retry transient errors once or twice with backoff; do NOT
-  retry 4xx validation errors.
-
-## Provider abstraction [PREFER]
-Model provider behind a `Protocol`/ABC, selected by a small factory, so a
-provider swap doesn't ripple. Config selects provider via a `Literal`.
-
-## Python conventions [MUST / MUST-UNLESS]
-- Type hints on every signature incl. return. Modern syntax (`X | None`,
-  `list[str]`). `from __future__ import annotations` at top of each module.
-- mypy --strict is part of done. Local `# type: ignore[code]  # reason` only,
-  never a global disable.
-- No bare `except:` / `except Exception:` — catch specific exceptions. Named
-  domain exceptions per layer. Don't swallow silently.
-- No mutable default args. `pathlib`, not `os.path`. `logging`, not `print`.
-  f-strings. Composition over inheritance; `@dataclass`/Pydantic for DTOs.
-- `uv` for deps/env; pin in the lockfile. Absolute imports.
-- Docstrings: yes (ruff `D` is on, google convention). AI writes them.
-
 ## Verification scaffolding
-- `ruff.toml` in root (already present). Note the per-file-ignore for Cyrillic
-  prompt files (RUF001/002/003) — keep prompts under a path the glob matches
-  (`prompts.py` or `prompts/`).
-- Pre-commit: ruff (lint+format) + mypy strict, all enabled. Run
-  `pre-commit install` once myself.
-- One command verifies everything; run it after each change, fix until green.
-- Versions: verify current tags with `pre-commit autoupdate` rather than
-  trusting the pinned revs from memory — ruff rule codes drift between versions.
+- `ruff.toml` in root. Per-file-ignore for Cyrillic prompt files
+  (RUF001/002/003) — keep prompts under `prompts.py` or `prompts/`.
+- Pre-commit: ruff (lint+format) + mypy strict. Run `pre-commit install` once.
+- One command verifies everything; run after each change, fix until green.
+- Verify hook versions with `pre-commit autoupdate` — don't trust pinned revs.
 
 ## Russian/non-ASCII note
 Prompt strings are in Russian. The ruff per-file-ignore above handles the
 "ambiguous character" rules locally — don't disable RUF globally to work around
 it.
 
-## Streaming (added in Phase 2)
+## Streaming
 The app exposes two endpoints:
 - `POST /ask` — synchronous, returns `{answer, language}` JSON.
 - `POST /ask/stream` — **SSE**, streams raw JSON chunks `{chunk: "..."}` then
   a final `{done: true, answer, language}`. Use this for the UI typewriter effect.
 
-`AnthropicProvider.stream_complete()` uses the native `AsyncAnthropic.messages.stream()` — no `queue.Queue`, no `run_in_executor`, no thread-pool bridging. It yields raw text chunks via `stream.text_stream` and retries on transient failures (429/5xx) before the first chunk.
+`AnthropicProvider.stream_complete()` uses the native `AsyncAnthropic.messages.stream()` — no `queue.Queue`, no `run_in_executor`, no thread-pool bridging. It yields raw text chunks via `stream.text_stream` and retries on transient failures (429/5xx) **before the first chunk**; once streaming has started, errors are mapped to `LLMError` rather than retried.
 
-`_extract_answer_from_stream` — an async-generator transformer in the service layer — extracts only the `answer` field content via a state machine + JSON-escape decoder, so the typewriter effect never shows raw JSON.
+`_extract_answer_from_stream` — an async-generator transformer in the service layer — runs a two-state machine: (1) **waiting** — accumulate raw tokens until `"answer": "` regex match; (2) **streaming** — decode JSON escape sequences char by char, emit clean markdown, stop at the unescaped closing `"`. Language is detected heuristically (Cyrillic presence → `"ru"`). The SSE router delegates entirely to `ask_stream_llm()` — no business logic in the router.
 
 The frontend uses `fetch` + `ReadableStream` (no `EventSource`) — this lets us
 POST a JSON body and read SSE lines manually via `getReader()`.
 
-## Key dev commands (for AI assistants)
+## Current state (updated 2026-07-20)
+- **All 3 layers**: routers, services, providers — complete, 17 source files, mypy --strict clean.
+- **Model**: `claude-haiku-4-5` in `app/config.py`, prompt caching enabled, `max_tokens=4096`.
+- **Frontend**: `static/index.html` — React 18 CDN + marked.js + highlight.js + DOMPurify, single file, no bundler.
+- **Tests**: 68 pytest tests, coverage 89% (both `/ask` and `/ask/stream` paths covered).
+- **Docs**: `TECHNICAL_DECISIONS.md` (18 ADRs), `README.md`, `AUDIT.MD`.
+- **Known limitations**: no auth/rate-limiting, history is per-process `deque` (not shared across workers), no database. See `README.md` and TD §8 for rationale.
+
+## Key dev commands
 ```bash
 # Full check — run after every change, fix until green
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py && uv run pytest tests/ -v

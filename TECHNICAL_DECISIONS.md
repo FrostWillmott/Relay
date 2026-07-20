@@ -52,7 +52,7 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 - The async client requires `await` everywhere through the call stack, but FastAPI is already async — this is natural, not a cost.
 - The Anthropic SDK's async client is now mature and well-tested; the earlier concern about sync being "more battle-tested for retry behaviour" no longer applies.
 
-**Why we chose this:** The native `AsyncAnthropic` eliminates ~40 lines of thread-bridging boilerplate (`queue.Queue`, `run_in_executor`, `_sync_stream`). Streaming becomes a simple `async for text in stream.text_stream` — no thread, no queue, no state-machine-in-a-thread. Retry is a manual loop in the async generator (see §14), which is transparent and testable. The code is simpler, faster to reason about, and has fewer moving parts.
+**Why we chose this:** The native `AsyncAnthropic` eliminates ~40 lines of thread-bridging boilerplate (`queue.Queue`, `run_in_executor`, `_sync_stream`). Streaming becomes a simple `async for text in stream.text_stream` — no thread, no queue, no state-machine-in-a-thread. Retry is a manual loop in the async generator (see §13), which is transparent and testable. The code is simpler, faster to reason about, and has fewer moving parts.
 
 ---
 
@@ -221,7 +221,7 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ---
 
-## 14. Retry on the Streaming Path: `stream_complete` Loop vs. `@retry` on `_extract_answer_from_stream`
+## 13. Retry on the Streaming Path: `stream_complete` Loop vs. `@retry` on `_extract_answer_from_stream`
 
 **Decision:** Implement retry at the `stream_complete` level (manual `for attempt in range(3)` with `asyncio.sleep` back-off) — retry only before the first chunk is yielded.
 
@@ -240,7 +240,7 @@ Each section follows: **Decision → Alternatives Considered → Trade-offs → 
 
 ---
 
-## 13. Tests: `pytest` with `MockProvider` vs. No Tests
+## 14. Tests: `pytest` with `MockProvider` vs. No Tests
 
 **Decision:** `tests/test_core.py` with 68 unit tests covering `sanitize`, `parse_output`, `ask_llm`, `_decode_json_char`, `ask_stream_llm`, and more — both `/ask` and `/ask/stream` paths covered.
 

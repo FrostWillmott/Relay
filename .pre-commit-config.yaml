@@ -1,7 +1,7 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Verify the latest tag before committing: `pre-commit autoupdate`.
-    rev: v0.15.18
+    rev: v0.15.22
     hooks:
       # Linter id is now `ruff-check` (old `ruff` still works as an alias).
       # Lint hook runs before format hook so autofixes get reformatted.
@@ -10,7 +10,7 @@ repos:
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
+    rev: v2.3.0
     hooks:
       - id: mypy
         pass_filenames: false
@@ -20,4 +20,3 @@ repos:
           - "pydantic-settings>=2.0"
           - "fastapi>=0.115"
           - "anthropic>=0.40"
-          - "tenacity>=9.0"
