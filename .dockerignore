@@ -1,0 +1,39 @@
+# Environment & secrets
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment (rebuilt in Docker)
+.venv/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# Claude / Junie internals
+.claude/
+.junie/
+
+# Tests (not needed at runtime)
+tests/
+
+# Dev tooling config
+.pre-commit-config.yaml
+ruff.toml
+
+# Docs (not served)
+README.md
+TECHNICAL_DECISIONS.md
+AUDIT.MD
+ai-developer-brief.txt
+test_main.http
