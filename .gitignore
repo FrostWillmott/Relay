@@ -19,8 +19,9 @@ venv/
 .idea/
 .vscode/
 
-# Coverage
+# Coverage (coverage.svg IS tracked — CI keeps it fresh)
 .coverage
+coverage.xml
 
 # Agent-local state (rule modules in .claude/*.md ARE tracked)
 .claude/settings.local.json
