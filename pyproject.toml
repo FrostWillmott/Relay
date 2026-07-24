@@ -1,6 +1,8 @@
 [project]
 name = "relay"
 version = "0.1.0"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.111.0",
@@ -20,12 +22,12 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--cov=app --cov=main --cov-report=term-missing --cov-fail-under=70"
+addopts = "--cov=app --cov=main --cov-report=term-missing --cov-fail-under=90"
 asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["app", "main"]
 
 [tool.coverage.report]
-fail_under = 70
+fail_under = 90
 show_missing = true
