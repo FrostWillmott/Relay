@@ -56,12 +56,14 @@ The app exposes two endpoints:
 The frontend uses `fetch` + `ReadableStream` (no `EventSource`) — this lets us
 POST a JSON body and read SSE lines manually via `getReader()`.
 
-## Current state (updated 2026-07-20)
+## Current state (updated 2026-07-24)
 - **All 3 layers**: routers, services, providers — complete, 17 source files, mypy --strict clean.
 - **Model**: `claude-haiku-4-5` in `app/config.py`, prompt caching enabled, `max_tokens=4096`.
 - **Frontend**: `static/index.html` — React 18 CDN + marked.js + highlight.js + DOMPurify, single file, no bundler.
-- **Tests**: 68 pytest tests, coverage 89% (both `/ask` and `/ask/stream` paths covered).
-- **Docs**: `TECHNICAL_DECISIONS.md` (18 ADRs), `README.md`, `AUDIT.MD`.
+- **Tests**: 82 pytest tests, coverage 97%. Provider is tested through a fake
+  SDK client (`tests/test_providers.py`) incl. retry/timeout/mid-stream paths;
+  `test_ask_stream_integration_fake_sdk` covers fake SDK stream → SSE end to end.
+- **Docs**: `TECHNICAL_DECISIONS.md` (18 ADRs), `README.md`.
 - **Known limitations**: no auth/rate-limiting, history is per-process `deque` (not shared across workers), no database. See `README.md` and TD §8 for rationale.
 
 ## Key dev commands
