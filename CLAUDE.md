@@ -17,6 +17,12 @@ General Python, LLM, testing, and architecture conventions live in
 overrides. When this file conflicts with a module's [PREFER] rule, this file
 wins; [MUST] conflicts are surfaced rather than silently resolved.
 
+Documented deviations from modules:
+- No `DECISIONS.md` — the decisions log lives in `TECHNICAL_DECISIONS.md`
+  (ADR format), per `documentation.md`'s escape hatch.
+- `tests/` is flat, not source-mirrored (`testing.md` structure rule) — the
+  app is 17 source files; three test modules map cleanly onto the layers.
+
 ## Lightweight mode (overrides `clean-architecture.md`)
 This project intentionally uses the lighter 3-layer split, NOT full Clean
 Architecture. Skipped on purpose for the timebox: full CA, data-engineering

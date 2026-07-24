@@ -22,6 +22,6 @@ venv/
 # Coverage
 .coverage
 
-# Claude / Junie agent internals (not project artefacts)
-.claude/
+# Agent-local state (rule modules in .claude/*.md ARE tracked)
+.claude/settings.local.json
 .junie/
