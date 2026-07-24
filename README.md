@@ -1,5 +1,10 @@
 # Relay — AI Team Assistant
 
+[![CI](https://github.com/FrostWillmott/Relay/actions/workflows/ci.yml/badge.svg)](https://github.com/FrostWillmott/Relay/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12+-blue)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+![mypy](https://img.shields.io/badge/mypy-strict-blue)
+
 > A dev-team mini-dashboard: ask a question — get a structured, streamed answer from Claude with a typewriter effect, history of the last 5 queries, and a "Copy" button.
 
 ---
@@ -18,7 +23,7 @@ The streamed answer is rendered incrementally — raw JSON is never shown to the
 | Backend | FastAPI (async) + Pydantic v2 + pydantic-settings |
 | LLM | Anthropic SDK (Claude `claude-haiku-4-5`), prompt caching, SSE streaming |
 | Frontend | React 18 CDN + marked.js + highlight.js + DOMPurify — **a single** `static/index.html`, no bundler |
-| Dev | uv, ruff, mypy --strict, pytest (68 tests), pre-commit |
+| Dev | uv, ruff, mypy --strict, pytest (82 tests), pre-commit, GitHub Actions CI |
 
 ---
 
@@ -81,7 +86,7 @@ More details: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 18 architec
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py && uv run pytest tests/ -v
 ```
 
-Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 68/68 tests passing.
+Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 82/82 tests passing.
 
 ---
 
@@ -104,4 +109,4 @@ No authentication, rate-limiting, or persistent storage — built as a focused d
 
 ## Background
 
-Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 68 tests, streaming fixes, and 18 documented architectural decisions as an experiment in AI-agent-assisted development.
+Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 82 tests, streaming fixes, and 18 documented architectural decisions as an experiment in AI-agent-assisted development.
