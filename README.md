@@ -4,6 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 ![mypy](https://img.shields.io/badge/mypy-strict-blue)
+![Coverage](https://img.shields.io/badge/coverage-%E2%89%A595%25-brightgreen)
 
 > A dev-team mini-dashboard: ask a question — get a structured, streamed answer from Claude with a typewriter effect, history of the last 5 queries, and a "Copy" button.
 

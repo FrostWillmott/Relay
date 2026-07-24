@@ -20,7 +20,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--cov=app --cov=main --cov-report=term-missing --cov-fail-under=70"
+addopts = "--cov=app --cov=main --cov-report=term-missing --cov-fail-under=95"
 asyncio_mode = "auto"
 
 [tool.coverage.run]
