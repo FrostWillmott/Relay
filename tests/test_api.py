@@ -13,6 +13,7 @@ from app.exceptions import LLMError
 from app.models.request import AskRequest
 from app.services import history as history_service
 from main import app
+from tests.test_providers import _FakeMessages, _FakeStream, make_provider
 
 
 class _MockProvider:
@@ -171,6 +172,37 @@ def test_ask_stream_llm_error(client: TestClient) -> None:
     resp = client.post("/ask/stream", json={"question": "hi"})
     events = _parse_sse(resp.text)
     assert any(e.get("error") == "rate_limit" for e in events)
+
+
+# ---------------------------------------------------------------------------
+# Integration: fake SDK stream → real provider → service → SSE
+# ---------------------------------------------------------------------------
+
+
+def test_ask_stream_integration_fake_sdk(client: TestClient) -> None:
+    """Full path through the real AnthropicProvider with a fake SDK client.
+
+    Chunk boundaries deliberately split the ``"answer"`` key and a JSON
+    escape sequence to exercise the service-layer state machine end to end.
+    """
+    sdk_chunks = ['{"ans', 'wer": "Hi\\n', "**there**", '"}']
+    messages = _FakeMessages(stream_results=[_FakeStream(chunks=sdk_chunks)])
+    app.state.provider = make_provider(messages)
+
+    resp = client.post("/ask/stream", json={"question": "hello"})
+
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    done = next(e for e in events if e.get("done"))
+    assert done["answer"] == "Hi\n**there**"
+    assert done["language"] == "en"
+    streamed = "".join(e["chunk"] for e in events if "chunk" in e)
+    assert streamed == "Hi\n**there**"
+    assert messages.stream_calls == 1
+
+    hist = client.get("/history").json()
+    assert len(hist) == 1
+    assert hist[0]["question"] == "hello"
 
 
 # ---------------------------------------------------------------------------
