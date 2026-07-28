@@ -3,15 +3,16 @@ name: CI
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - coverage.svg
   pull_request:
 
 jobs:
   check:
     runs-on: ubuntu-latest
     permissions:
+      # python-coverage-comment-action pushes the badge to a data branch
+      # and posts the coverage diff as a PR comment.
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
 
@@ -33,23 +34,11 @@ jobs:
         run: uv run mypy --strict app/ main.py
 
       - name: Tests
-        run: uv run pytest tests/ --cov-report=xml
+        run: uv run pytest tests/
 
-      - name: Generate coverage badge
-        if: >-
-          success() &&
-          github.ref == 'refs/heads/master' &&
-          github.event_name == 'push'
-        run: >-
-          uvx --from 'genbadge[coverage]'
-          genbadge coverage -i coverage.xml -o coverage.svg
-
-      - name: Push coverage badge
-        if: >-
-          success() &&
-          github.ref == 'refs/heads/master' &&
-          github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v7
+      - name: Coverage badge and PR comment
+        uses: py-cov-action/python-coverage-comment-action@v3
         with:
-          commit_message: "chore: update coverage badge"
-          file_pattern: coverage.svg
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 90
+          MINIMUM_ORANGE: 80

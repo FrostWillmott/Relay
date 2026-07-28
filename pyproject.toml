@@ -27,6 +27,9 @@ asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["app", "main"]
+# Required by py-cov-action/python-coverage-comment-action: it re-reads .coverage
+# in a different checkout path than the one that produced it.
+relative_files = true
 
 [tool.coverage.report]
 fail_under = 90

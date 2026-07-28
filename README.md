@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.12+-blue)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 ![mypy](https://img.shields.io/badge/mypy-strict-blue)
-![coverage](./coverage.svg)
+[![Coverage](https://raw.githubusercontent.com/FrostWillmott/Relay/python-coverage-comment-action-data/badge.svg)](https://htmlpreview.github.io/?https://github.com/FrostWillmott/Relay/blob/python-coverage-comment-action-data/htmlcov/index.html)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 > A dev-team mini-dashboard: ask a question — get a structured, streamed answer from Claude with a typewriter effect, history of the last 5 queries, and a "Copy" button.

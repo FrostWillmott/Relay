@@ -19,7 +19,7 @@ venv/
 .idea/
 .vscode/
 
-# Coverage (coverage.svg IS tracked — CI keeps it fresh)
+# Coverage (the badge lives on the python-coverage-comment-action-data branch)
 .coverage
 coverage.xml
 
