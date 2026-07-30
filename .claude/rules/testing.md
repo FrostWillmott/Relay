@@ -5,7 +5,7 @@ Rule levels are defined in `_LEVELS.md`.
 
 ## Structure  [MUST]
 - Test names: `test_{what}_{condition}_{expected_outcome}`.
-- Mirror the source tree under `tests/`: `app/services/user.py` →
+- Mirror the source tree under `../../tests`: `app/services/user.py` →
   `tests/services/test_user.py`.
 - One `conftest.py` per directory level; put shared fixtures at the highest
   level they're needed, not all in the root conftest.
@@ -34,7 +34,7 @@ Rule levels are defined in `_LEVELS.md`.
   real DB fails is worse than no test.
 
 ## Async  [MUST-UNLESS]
-- Use `pytest-asyncio` with `asyncio_mode = "auto"` in `pyproject.toml`; don't
+- Use `pytest-asyncio` with `asyncio_mode = "auto"` in `../../pyproject.toml`; don't
   manually run event loops in tests.
 - Async test fixtures must be `async def` too.
 - Use `anyio` markers only if the codebase needs to be backend-agnostic.

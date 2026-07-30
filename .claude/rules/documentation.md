@@ -5,7 +5,7 @@ CLAUDE.md (or the user, for the current task) explicitly says otherwise, the
 agent keeps both current — this is ongoing maintenance, not a one-time setup
 step.
 
-## `README.md`  [MUST-UNLESS]
+## `../../README.md`  [MUST-UNLESS]
 - Create it if missing; every repo needs one.
 - Keep it accurate after any change that affects what a new reader needs to
   know: what the project is, the stack, setup/install steps, how to run it,

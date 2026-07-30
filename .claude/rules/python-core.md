@@ -1,7 +1,7 @@
 # Python conventions
 
 The mechanical half (line length, import order, quote style) is enforced by
-`ruff.toml` — not restated here. This file covers what the linter does NOT
+`../../ruff.toml` — not restated here. This file covers what the linter does NOT
 catch but agents get wrong by default.
 
 ## Type hints  [MUST]

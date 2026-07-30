@@ -18,11 +18,12 @@ venv/
 # IDEs
 .idea/
 .vscode/
+.mcp.json
 
 # Coverage (the badge lives on the python-coverage-comment-action-data branch)
 .coverage
 coverage.xml
 
 # Agent-local state (rule modules in .claude/*.md ARE tracked)
-.claude/settings.local.json
+.claude/rules/settings.local.json
 .junie/
