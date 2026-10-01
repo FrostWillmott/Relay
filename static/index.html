@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -354,7 +354,7 @@
     <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif; color: #6B6B6B;">
       <div style="text-align: center;">
         <h1 style="color: #0F0F0F; margin-bottom: 8px;">Relay</h1>
-        <p>Инициализация приложения...</p>
+        <p>Loading…</p>
       </div>
     </div>
   </div>
@@ -435,7 +435,7 @@
       if (!ts) return "";
       const date = new Date(ts);
       if (isNaN(date.getTime())) return "";
-      return date.toLocaleTimeString("ru-RU", {
+      return date.toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -443,20 +443,20 @@
 
     function errorMessage(err) {
       if (!err) return null;
-      if (err.type === "empty") return "Введите вопрос перед отправкой.";
-      if (err.type === "network") return "Нет соединения с сервером. Проверьте интернет.";
+      if (err.type === "empty") return "Enter a question before sending.";
+      if (err.type === "network") return "Can't reach the server. Check your connection.";
       // SSE stream errors carry a reason string
-      if (err.reason === "no_key") return "AI-сервис недоступен — API-ключ не настроен. Обратитесь к администратору.";
-      if (err.reason === "rate_limit") return "Слишком много запросов. Подождите немного и повторите.";
-      if (err.reason === "timeout") return "Запрос выполнялся слишком долго. Попробуйте ещё раз.";
-      if (err.reason === "invalid_output") return "Не удалось разобрать ответ AI. Попробуйте ещё раз.";
-      if (err.reason) return `Ошибка AI (${err.reason}). Попробуйте позже.`;
+      if (err.reason === "no_key") return "AI service unavailable — API key is not configured. Contact the administrator.";
+      if (err.reason === "rate_limit") return "Too many requests. Wait a moment and try again.";
+      if (err.reason === "timeout") return "The request took too long. Please try again.";
+      if (err.reason === "invalid_output") return "Couldn't parse the AI response. Please try again.";
+      if (err.reason) return `AI error (${err.reason}). Please try again later.`;
       // HTTP status errors (non-SSE path, fallback)
-      if (err.status === 429) return "Слишком много запросов. Подождите немного и повторите.";
-      if (err.status === 503) return "AI-сервис недоступен — API-ключ не настроен. Обратитесь к администратору.";
-      if (err.status === 504) return "Запрос выполнялся слишком долго. Попробуйте ещё раз.";
-      if (err.status === 422) return "Некорректный запрос. Попробуйте переформулировать вопрос.";
-      return `Ошибка сервера (${err.status ?? "неизвестно"}). Попробуйте позже.`;
+      if (err.status === 429) return "Too many requests. Wait a moment and try again.";
+      if (err.status === 503) return "AI service unavailable — API key is not configured. Contact the administrator.";
+      if (err.status === 504) return "The request took too long. Please try again.";
+      if (err.status === 422) return "Invalid request. Try rephrasing your question.";
+      return `Server error (${err.status ?? "unknown"}). Please try again later.`;
     }
 
     /* ── ErrorBanner ──────────────────────────────────────────────────── */
@@ -503,30 +503,30 @@
 
       return (
         <div className="form-card">
-          <label className="form-label" htmlFor="question">Ваш вопрос</label>
+          <label className="form-label" htmlFor="question">Your question</label>
           <textarea
             id="question"
             ref={textareaRef}
             className="form-textarea"
-            placeholder="Например: Как правильно настроить индексы в PostgreSQL для full-text search?"
+            placeholder="e.g. How should I set up PostgreSQL indexes for full-text search?"
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={loading}
-            aria-label="Введите вопрос"
+            aria-label="Enter your question"
           />
           <div className="form-footer">
-            <span className="form-hint">Ctrl+Enter — отправить &nbsp;·&nbsp; Esc — очистить</span>
+            <span className="form-hint">Ctrl+Enter — send &nbsp;·&nbsp; Esc — clear</span>
             <button
               className="btn btn-primary"
               onClick={handleSubmit}
               disabled={loading}
-              aria-label={loading ? "Загрузка..." : "Задать вопрос"}
+              aria-label={loading ? "Loading…" : "Ask a question"}
             >
               {loading ? (
                 <>
                   <span className="spinner" aria-hidden="true" />
-                  Думаю…
+                  Thinking…
                 </>
               ) : (
                 "Ask AI →"
@@ -555,13 +555,13 @@
         <div className="answer-card" aria-live="polite">
           <div className="answer-header">
             <span className="answer-label">
-              {isStreaming ? "Генерирую ответ…" : "Ответ AI"}
+              {isStreaming ? "Generating answer…" : "AI answer"}
             </span>
             {answer && (
               <button
                 className="btn btn-ghost copy-btn"
                 onClick={handleCopy}
-                aria-label="Скопировать ответ"
+                aria-label="Copy answer"
               >
                 {copied ? "✓ Copied!" : "Copy"}
               </button>
@@ -589,9 +589,9 @@
 
       return (
         <div className="history-section">
-          <p className="section-title">История запросов</p>
+          <p className="section-title">Query history</p>
           {items.length === 0 ? (
-            <p className="empty-state">Запросов пока нет — задайте первый вопрос.</p>
+            <p className="empty-state">No queries yet — ask your first question.</p>
           ) : (
             <div className="history-list">
               {items.map((item, idx) => (
@@ -602,7 +602,7 @@
                   tabIndex={0}
                   onClick={() => onSelect(item.question)}
                   onKeyDown={e => (e.key === "Enter" || e.key === " ") && onSelect(item.question)}
-                  aria-label={`Повторить вопрос: ${item.question}`}
+                  aria-label={`Repeat question: ${item.question}`}
                 >
                   <span className="history-q">{item.question}</span>
                   <span className="history-time">{item.time ? fmt(item.time) : ""}</span>
@@ -708,7 +708,7 @@
         <main className="page">
           <header className="header">
             <h1>Relay <span>·</span> AI Team Assistant</h1>
-            <p>Быстрые структурированные ответы для команды разработчиков</p>
+            <p>Fast, structured answers for dev teams</p>
           </header>
 
           <QuestionForm onSubmit={handleSubmit} loading={loading} />
