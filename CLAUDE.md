@@ -45,9 +45,10 @@ rules (no pipelines here), circuit breakers / Redis idempotency / eval sets
 - Verify hook versions with `pre-commit autoupdate` — don't trust pinned revs.
 
 ## Russian/non-ASCII note
-Prompt strings are in Russian. The ruff per-file-ignore above handles the
-"ambiguous character" rules locally — don't disable RUF globally to work around
-it.
+Prompt strings are in English (client-facing code); the model still answers in
+the question's language. If Cyrillic ever returns to a prompt, the ruff
+per-file-ignore above handles the "ambiguous character" rules locally — don't
+disable RUF globally to work around it.
 
 ## Streaming
 The app exposes two endpoints:

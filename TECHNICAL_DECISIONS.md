@@ -328,3 +328,7 @@ The initial implementation used a date-suffixed model ID. The Anthropic SDK best
 ### `max_tokens`: 1024 → 4096
 
 The initial value of `1024` is appropriate for classification tasks (short labels, short decisions). A developer assistant answering technical questions with code examples can easily produce 800–2000 tokens of structured Markdown. Hitting the `1024` cap would truncate answers mid-sentence or mid-code-block. Raised to `4096` — the practical upper bound for a single structured answer from Haiku.
+
+### Prompt language: Russian → English (2026-10-01)
+
+The system, user-wrapper, and repair prompts in `app/prompts.py` were originally in Russian. They are now in English, so a client reading the code doesn't hit untranslated text. Answer language is unaffected: the prompt explicitly tells the model to reply in the language of the question, and `language` is still detected heuristically from the answer (§12).
