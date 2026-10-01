@@ -13,7 +13,7 @@ frontend just needs to look good on screen, not in source.
 
 ## Rule modules
 General Python, LLM, testing, and architecture conventions live in
-`.claude/*.md` modules — this file only states project-specific choices and
+`.claude/rules/*.md` modules — this file only states project-specific choices and
 overrides. When this file conflicts with a module's [PREFER] rule, this file
 wins; [MUST] conflicts are surfaced rather than silently resolved.
 
