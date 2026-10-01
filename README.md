@@ -15,6 +15,8 @@ Originally a 2-hour timeboxed contest build, later hardened with strict typing, 
 
 ## Screenshot / Demo
 
+![Relay UI: question form, streamed markdown answer with code and table, query history](docs/screenshot.png)
+
 Frontend: beige background, black cards, green accent, large Inter typography.
 The streamed answer is rendered incrementally — raw JSON is never shown to the user.
 
