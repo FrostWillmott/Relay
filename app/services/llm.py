@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Literal
 
 from pydantic import ValidationError
@@ -34,10 +34,14 @@ _ANSWER_START_RE = re.compile(r'"answer"\s*:\s*"')
 
 
 def sanitize(text: str, *, max_len: int) -> str:
-    """Truncate and neutralize prompt-injection markers."""
+    """Truncate and neutralize prompt-injection markers.
+
+    Markers are wrapped as ``[quoted: …]`` rather than deleted, so the
+    original text stays readable as inert, quoted content.
+    """
     text = text[:max_len]
     for pattern in _INJECTION_PATTERNS:
-        text = pattern.sub("[REMOVED]", text)
+        text = pattern.sub(lambda m: f"[quoted: {m.group()}]", text)
     return text
 
 
@@ -182,7 +186,7 @@ async def _extract_answer_from_stream(
 
 async def ask_stream_llm(
     question: str, provider: LLMProvider
-) -> AsyncIterator[str | AskResponse]:
+) -> AsyncGenerator[str | AskResponse, None]:
     """Stream LLM answer chunks, then yield a final AskResponse.
 
     Raw JSON chunks from the provider are filtered through

@@ -22,7 +22,7 @@ class _MockProvider:
         response: str = "",
         chunks: list[str] | None = None,
         complete_error: LLMError | None = None,
-        stream_error: LLMError | None = None,
+        stream_error: Exception | None = None,
     ) -> None:
         self._response = response
         self._chunks = chunks
@@ -172,6 +172,14 @@ def test_ask_stream_llm_error(client: TestClient) -> None:
     resp = client.post("/ask/stream", json={"question": "hi"})
     events = _parse_sse(resp.text)
     assert any(e.get("error") == "rate_limit" for e in events)
+
+
+def test_ask_stream_unexpected_error(client: TestClient) -> None:
+    """A non-LLMError exception is caught and surfaced as an error event."""
+    app.state.provider = _MockProvider(stream_error=RuntimeError("boom"))
+    resp = client.post("/ask/stream", json={"question": "hi"})
+    events = _parse_sse(resp.text)
+    assert any(e.get("error") == "internal_error" for e in events)
 
 
 # ---------------------------------------------------------------------------

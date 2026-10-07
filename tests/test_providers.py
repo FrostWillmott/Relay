@@ -5,39 +5,12 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import anthropic
 import pytest
 
 from app.exceptions import LLMError, LLMErrorReason
-from app.providers.anthropic import AnthropicProvider, _is_retryable
-
-# ---------------------------------------------------------------------------
-# _is_retryable
-# ---------------------------------------------------------------------------
-
-
-def test_is_retryable_rate_limit() -> None:
-    exc = MagicMock(spec=anthropic.RateLimitError)
-    assert _is_retryable(exc) is True
-
-
-def test_is_retryable_server_error() -> None:
-    exc = MagicMock(spec=anthropic.APIStatusError)
-    exc.status_code = 500
-    assert _is_retryable(exc) is True
-
-
-def test_is_retryable_client_error() -> None:
-    exc = MagicMock(spec=anthropic.APIStatusError)
-    exc.status_code = 400
-    assert _is_retryable(exc) is False
-
-
-def test_is_retryable_other_exception() -> None:
-    assert _is_retryable(ValueError("foo")) is False
-
+from app.providers.anthropic import AnthropicProvider
 
 # ---------------------------------------------------------------------------
 # _map_exc

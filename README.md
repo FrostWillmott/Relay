@@ -29,7 +29,7 @@ The streamed answer is rendered incrementally — raw JSON is never shown to the
 | Backend | FastAPI (async) + Pydantic v2 + pydantic-settings |
 | LLM | Anthropic SDK (Claude `claude-haiku-4-5`), prompt caching, SSE streaming |
 | Frontend | React 18 CDN + marked.js + highlight.js + DOMPurify — **a single** `static/index.html`, no bundler |
-| Dev | uv, ruff, mypy --strict, pytest (82 tests), pre-commit, GitHub Actions CI |
+| Dev | uv, ruff, mypy --strict, pytest (79 tests), pre-commit, GitHub Actions CI |
 
 ---
 
@@ -81,7 +81,7 @@ Streaming path `/ask/stream`:
 - `stream_complete` — an async generator with a retry loop (3 attempts, `2^n` back-off for 429/5xx)
 - `ask_stream_llm` — service layer: sanitize → build_message → stream → extract → history
 
-More details: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 18 architectural decisions with trade-offs.
+More details: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 8 architectural decisions with trade-offs.
 
 ---
 
@@ -92,7 +92,7 @@ More details: [`TECHNICAL_DECISIONS.md`](TECHNICAL_DECISIONS.md) — 18 architec
 uv run ruff check . && uv run ruff format --check . && uv run mypy --strict app/ main.py && uv run pytest tests/ -v
 ```
 
-Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 82/82 tests passing.
+Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pytest` — 79/79 tests passing.
 
 ---
 
@@ -109,10 +109,10 @@ Expected result: `ruff` — 0 errors, `mypy` — 0 errors across 17 files, `pyte
 
 ## Limitations
 
-No authentication, rate-limiting, or persistent storage — built as a focused demo of LLM integration and streaming. History is a per-process `deque` (not shared across uvicorn workers). See [TECHNICAL_DECISIONS.md §8](TECHNICAL_DECISIONS.md) for rationale.
+No authentication, rate-limiting, or persistent storage — built as a focused demo of LLM integration and streaming. History is a per-process `deque` (not shared across uvicorn workers). See [TECHNICAL_DECISIONS.md §7](TECHNICAL_DECISIONS.md) for rationale.
 
 ---
 
 ## Background
 
-Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 82 tests, streaming fixes, and 18 documented architectural decisions as an experiment in AI-agent-assisted development.
+Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 79 tests, streaming fixes, and 8 documented architectural decisions as an experiment in AI-agent-assisted development.
