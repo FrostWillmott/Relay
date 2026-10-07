@@ -15,17 +15,6 @@ from app.prompts import SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 
-def _is_retryable(exc: Exception) -> bool:
-    """Return True only for transient failures (429, 5xx, network)."""
-    if isinstance(exc, anthropic.RateLimitError):
-        return True
-    if isinstance(exc, anthropic.APIStatusError) and exc.status_code >= 500:
-        return True
-    if isinstance(exc, anthropic.APIConnectionError):
-        return True
-    return False
-
-
 class AnthropicProvider:
     """Wraps the async Anthropic client."""
 
