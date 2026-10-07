@@ -34,10 +34,14 @@ _ANSWER_START_RE = re.compile(r'"answer"\s*:\s*"')
 
 
 def sanitize(text: str, *, max_len: int) -> str:
-    """Truncate and neutralize prompt-injection markers."""
+    """Truncate and neutralize prompt-injection markers.
+
+    Markers are wrapped as ``[quoted: …]`` rather than deleted, so the
+    original text stays readable as inert, quoted content.
+    """
     text = text[:max_len]
     for pattern in _INJECTION_PATTERNS:
-        text = pattern.sub("[REMOVED]", text)
+        text = pattern.sub(lambda m: f"[quoted: {m.group()}]", text)
     return text
 
 
