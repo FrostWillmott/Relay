@@ -12,16 +12,16 @@
 | app/models/response.py        |       15 |        0 |    100% |           |
 | app/prompts.py                |        6 |        0 |    100% |           |
 | app/providers/\_\_init\_\_.py |        0 |        0 |    100% |           |
-| app/providers/anthropic.py    |       88 |        4 |     95% |25, 96, 129, 198 |
+| app/providers/anthropic.py    |       80 |        3 |     96% |85, 118, 187 |
 | app/providers/base.py         |        7 |        1 |     86% |        18 |
 | app/providers/factory.py      |        8 |        1 |     88% |        23 |
 | app/routers/\_\_init\_\_.py   |        0 |        0 |    100% |           |
-| app/routers/ask.py            |       53 |        1 |     98% |        49 |
+| app/routers/ask.py            |       58 |        1 |     98% |        50 |
 | app/services/\_\_init\_\_.py  |        0 |        0 |    100% |           |
 | app/services/history.py       |       10 |        0 |    100% |           |
-| app/services/llm.py           |      108 |        2 |     98% |   118-119 |
+| app/services/llm.py           |      108 |        2 |     98% |   122-123 |
 | main.py                       |       24 |        1 |     96% |        44 |
-| **TOTAL**                     |  **355** |   **10** | **97%** |           |
+| **TOTAL**                     |  **352** |    **9** | **97%** |           |
 
 
 ## Setup coverage badge
