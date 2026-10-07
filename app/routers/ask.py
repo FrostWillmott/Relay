@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -77,28 +78,31 @@ async def ask_stream(body: AskRequest, request: Request) -> StreamingResponse:
     async def _sse_generator() -> AsyncGenerator[str, None]:
         started = time.monotonic()
         try:
-            async for item in llm_service.ask_stream_llm(
-                body.question, provider
-            ):
-                if isinstance(item, AskResponse):
-                    done_payload = json.dumps(
-                        {
-                            "done": True,
-                            "answer": item.answer,
-                            "language": item.language,
-                        },
-                        ensure_ascii=False,
-                    )
-                    yield f"data: {done_payload}\n\n"
-                    logger.info(
-                        "POST /ask/stream OK: len=%d lang=%s %.3fs",
-                        len(item.answer),
-                        item.language,
-                        time.monotonic() - started,
-                    )
-                else:
-                    payload = json.dumps({"chunk": item}, ensure_ascii=False)
-                    yield f"data: {payload}\n\n"
+            async with contextlib.aclosing(
+                llm_service.ask_stream_llm(body.question, provider)
+            ) as stream:
+                async for item in stream:
+                    if isinstance(item, AskResponse):
+                        done_payload = json.dumps(
+                            {
+                                "done": True,
+                                "answer": item.answer,
+                                "language": item.language,
+                            },
+                            ensure_ascii=False,
+                        )
+                        yield f"data: {done_payload}\n\n"
+                        logger.info(
+                            "POST /ask/stream OK: len=%d lang=%s %.3fs",
+                            len(item.answer),
+                            item.language,
+                            time.monotonic() - started,
+                        )
+                    else:
+                        payload = json.dumps(
+                            {"chunk": item}, ensure_ascii=False
+                        )
+                        yield f"data: {payload}\n\n"
         except LLMError as exc:
             logger.warning(
                 "POST /ask/stream failed: %s q=%.80r %.3fs",
@@ -107,6 +111,13 @@ async def ask_stream(body: AskRequest, request: Request) -> StreamingResponse:
                 time.monotonic() - started,
             )
             yield f"data: {json.dumps({'error': exc.reason})}\n\n"
+        except Exception:
+            logger.exception(
+                "POST /ask/stream unexpected error: q=%.80r %.3fs",
+                body.question,
+                time.monotonic() - started,
+            )
+            yield f"data: {json.dumps({'error': 'internal_error'})}\n\n"
 
     return StreamingResponse(
         _sse_generator(),
