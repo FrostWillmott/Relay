@@ -111,6 +111,9 @@ async def ask_stream(body: AskRequest, request: Request) -> StreamingResponse:
                 time.monotonic() - started,
             )
             yield f"data: {json.dumps({'error': exc.reason})}\n\n"
+        # Deliberate catch-all: the 200 + SSE headers are already sent, so
+        # FastAPI's exception handlers can't run — an error event is the only
+        # way to tell the client the stream failed.
         except Exception:
             logger.exception(
                 "POST /ask/stream unexpected error: q=%.80r %.3fs",
