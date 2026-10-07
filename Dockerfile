@@ -4,7 +4,7 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 # Install uv for fast, reproducible dependency resolution.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.12.11 /uv /usr/local/bin/uv
 
 # Install dependencies into a virtual environment.
 # Layers: pyproject + lock first (cached when deps don't change), then sync.
@@ -26,6 +26,10 @@ COPY static/ ./static/
 
 # Ensure the venv is used for all Python invocations.
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Run the app as an unprivileged user.
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 
 EXPOSE 8000
 

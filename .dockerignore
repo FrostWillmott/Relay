@@ -34,6 +34,3 @@ ruff.toml
 # Docs (not served)
 README.md
 TECHNICAL_DECISIONS.md
-AUDIT.MD
-ai-developer-brief.txt
-test_main.http
