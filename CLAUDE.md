@@ -63,7 +63,7 @@ The app exposes two endpoints:
 The frontend uses `fetch` + `ReadableStream` (no `EventSource`) — this lets us
 POST a JSON body and read SSE lines manually via `getReader()`.
 
-## Current state (updated 2026-10-07)
+## Current state (updated 2026-10-08)
 - **All 3 layers**: routers, services, providers — complete, 17 source files, mypy --strict clean.
 - **Model**: `claude-haiku-4-5` in `app/config.py`, prompt caching enabled, `max_tokens=4096`.
 - **Frontend**: `static/index.html` — React 18 CDN + marked.js + highlight.js + DOMPurify, single file, no bundler.
