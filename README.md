@@ -125,3 +125,5 @@ No authentication, rate-limiting, or persistent storage — built as a focused d
 ## Background
 
 Originally built as a 2-hour timeboxed contest challenge, then hardened with mypy strict mode, 79 tests, streaming fixes, and 8 documented architectural decisions as an experiment in AI-agent-assisted development.
+
+**How this was built.** Spec, ADRs and acceptance criteria are mine; implementation with Claude Code, every change reviewed by hand before commit. The agent configuration lives in [developer-os](https://github.com/FrostWillmott/developer-os).
