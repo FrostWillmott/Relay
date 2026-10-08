@@ -50,6 +50,15 @@ cp .env.example .env
 # Open .env and paste your ANTHROPIC_API_KEY
 ```
 
+Optional settings (read from `.env` or the environment, see `app/config.py`):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | Required for answers; without it requests return 503 |
+| `LLM_MODEL` | `claude-haiku-4-5` | Claude model ID |
+| `LLM_TIMEOUT_SEC` | `30.0` | Per-call LLM timeout, seconds |
+| `MAX_INPUT_LEN` | `2000` | Max question length, characters |
+
 ### 3. Run the server
 
 ```bash
