@@ -34,6 +34,6 @@ USER appuser
 EXPOSE 8000
 
 # ANTHROPIC_API_KEY is required at runtime — pass via `docker run --env`.
-# All other settings (LLM_MODEL, MAX_INPUT_LEN, LLM_TIMEOUT) have defaults
+# All other settings (LLM_MODEL, MAX_INPUT_LEN, LLM_TIMEOUT_SEC) have defaults
 # in app/config.py and can be overridden with --env as well.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
